@@ -178,16 +178,22 @@ a{color:var(--accent)}
 .node:hover{box-shadow:var(--shadow);border-color:var(--accent-soft)}
 .node.sel{border-color:var(--accent);box-shadow:0 0 0 3px rgba(122,92,62,.22),var(--shadow)}
 .node.focus{border-color:var(--accent)}
-.node.male{border-left-color:var(--male)} .node.female{border-left-color:var(--female)} .node.unknown{border-left-color:var(--neutral)}
+.node.male{border-color:#9dbcd5;border-left-color:var(--male)} .node.female{border-color:#d7abb9;border-left-color:var(--female)} .node.unknown{border-color:#cabfad;border-left-color:var(--neutral)}
 .node .av{width:44px;height:44px;border-radius:50%;flex:0 0 44px;background:#efe7d8 center/cover no-repeat;
   display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--ink-soft);overflow:hidden;border:1px solid var(--line)}
 .node .av img{width:100%;height:100%;object-fit:cover}
 .node .meta{min-width:0;flex:1}
 .node .nm{font-weight:600;font-size:13.5px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .node .dt{font-size:11.5px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
-.node .badge{position:absolute;top:-7px;right:-7px;background:var(--accent);color:#fff;border-radius:10px;font-size:10px;padding:1px 6px;display:none}
-.node.hasmore .badge{display:block}
-.node.deceased .nm::after{content:" †";color:var(--ink-soft)}
+/* "+" add-relative button (top-right) — subtle, brightens on hover */
+.node .node-add{position:absolute;top:-9px;right:-9px;width:22px;height:22px;padding:0;border-radius:50%;border:none;
+  background:var(--accent);color:#fff;font-size:15px;line-height:1;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;box-shadow:0 1px 3px rgba(40,30,15,.3);opacity:.55;transition:opacity .12s,transform .1s}
+.node:hover .node-add{opacity:1}
+.node .node-add:hover{transform:scale(1.15)}
+/* small deceased marker (top-left corner) */
+.node .dead-badge{position:absolute;top:-8px;left:-8px;width:19px;height:19px;border-radius:50%;background:#8b8177;color:#fff;
+  font-size:12px;line-height:1;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 2px rgba(40,30,15,.3);border:1.5px solid var(--panel)}
 .node.ghost{opacity:.6;border-style:dashed;background:#faf7f0}
 .node.nocolor{border-left-width:1px}
 /* whole-card colour (tinted background + full coloured border) */
@@ -372,6 +378,23 @@ a{color:var(--accent)}
 .menu-pop button{display:flex;width:100%;text-align:left;border:none;background:transparent;padding:9px 10px;border-radius:7px;gap:10px;align-items:center;color:var(--ink)}
 .menu-pop button:hover{background:#f3ede1}
 .menu-pop .sep{height:1px;background:var(--line);margin:5px 4px}
+.menu-pop .mi-check{flex:0 0 18px;text-align:center;opacity:.9}
+.add-pop{min-width:180px}
+/* upcoming birthdays / anniversaries widget on the canvas */
+.upcoming{position:absolute;left:14px;bottom:14px;z-index:8;background:var(--panel);border:1px solid var(--line-strong);border-radius:12px;
+  box-shadow:var(--shadow);width:250px;max-width:62vw;overflow:hidden;font-size:13px}
+.up-head{display:flex;align-items:center;padding:8px 10px;background:#faf6ee;border-bottom:1px solid var(--line);font-weight:600;font-size:12.5px;font-family:var(--serif)}
+.up-head span{flex:1}
+.up-x{border:none;background:transparent;cursor:pointer;color:var(--ink-soft);font-size:13px;padding:0 2px}
+.up-x:hover{color:var(--ink)}
+.up-row{display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--line)}
+.up-row:last-child{border-bottom:none}
+.up-row:hover{background:#f5efe3}
+.up-ic{flex:0 0 auto}
+.up-t{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.up-d{color:var(--accent);font-weight:600;font-variant-numeric:tabular-nums;flex:0 0 auto}
+.up-more{display:block;width:100%;text-align:center;border:none;background:transparent;padding:7px;color:var(--accent);cursor:pointer;font-size:12.5px;border-top:1px solid var(--line)}
+.up-more:hover{background:#f5efe3}
 
 /* Photo tagging modal */
 .tagger{display:flex;gap:16px;flex-wrap:wrap}
@@ -437,7 +460,7 @@ a{color:var(--accent)}
     <button class="btn sm" id="btnImportGed" title="Import a GEDCOM (.ged) file">Import GEDCOM</button>
     <button class="btn sm" id="btnAddPerson">+ Person</button>
     <button class="btn sm primary" id="btnSave" title="Save now (Ctrl+S)">Save</button>
-    <button class="btn sm ghost icon-btn" id="btnMenu" title="More">⋯</button>
+    <button class="btn sm ghost icon-btn" id="btnMenu" title="Menu &amp; settings">⚙️</button>
   </div>
 
   <div class="viewbar">
@@ -1206,7 +1229,7 @@ function openTree(data, { dirHandle = null, fileHandle = null, historyLabel = "O
   state.currentView = (data.settings && data.settings.defaultView) || "family";
   state._search = "";
   state.pendingLabel = null;
-  if (FT.views) { FT.views.cam = { family: null, pedigree: null }; FT.views.collapsed = new Set(); }
+  if (FT.views) { FT.views.cam = { family: null, pedigree: null }; FT.views.collapsed = new Set(); FT.views.upcomingDismissed = false; }
   const sp = document.getElementById("sidePanel"); if (sp) sp.classList.remove("open");
 
   document.getElementById("startScreen").classList.add("hidden");
@@ -1867,13 +1890,13 @@ async function hydrateAvatars(root) {
 }
 FT.onPhotosRefreshed = () => { if (state.data) render(); };
 
-function nodeEl(p, { sel, focus, hasMore } = {}) {
+function nodeEl(p, { sel, focus, add } = {}) {
   const cd = cardDisplay();
   const sx = p.sex === "M" ? "male" : p.sex === "F" ? "female" : "unknown";
   const colorCls = cd.sexColor === "none" ? "nocolor" : cd.sexColor === "full" ? (sx + " fill") : sx;
   const el = document.createElement("div");
   el.className = "node sz-" + cd.size + " " + colorCls
-    + (sel ? " sel" : "") + (focus ? " focus" : "") + (p.death ? " deceased" : "") + (hasMore ? " hasmore" : "")
+    + (sel ? " sel" : "") + (focus ? " focus" : "") + (p.death ? " deceased" : "")
     + (cd.showPhoto ? "" : " nophoto");
   el.dataset.id = p.id;
   el.style.width = CARD_W + "px";
@@ -1885,7 +1908,9 @@ function nodeEl(p, { sel, focus, hasMore } = {}) {
     `<div class="meta"><div class="nm">${name}</div>` +
     `${l1 ? `<div class="dt">${U.escapeHtml(l1)}</div>` : ""}` +
     `${l2 ? `<div class="dt dt2">${U.escapeHtml(l2)}</div>` : ""}` +
-    `</div><span class="badge">＋</span>`;
+    `</div>` +
+    (p.death ? `<span class="dead-badge" title="Deceased">†</span>` : "") +
+    (add ? `<button class="node-add" title="Add a relative">＋</button>` : "");
   return el;
 }
 
@@ -2082,14 +2107,14 @@ V.renderFamily = function (vr) {
   for (const [id, v] of L.placed) {
     const p = store.person(id); if (!p) continue;
     const isFocus = id === V.getFocus();
-    const hasMore = store.parents(id).length || store.children(id).length || store.partners(id).length;
-    const el = nodeEl(p, { sel: id === state.selectedId, focus: isFocus, hasMore });
+    const el = nodeEl(p, { sel: id === state.selectedId, focus: isFocus, add: true });
     el.style.left = v.px + "px";
     el.style.top = v.py + "px";
     canvas.appendChild(el);
   }
   vr.appendChild(canvas);
   addCanvasControls(vr, "family");
+  renderUpcoming(vr);
   attachCanvasInteractions(vr, canvas, "family");
   hydrateAvatars(canvas);
   applyCam(canvas, "family", L);
@@ -2143,7 +2168,7 @@ V.renderPedigree = function (vr) {
   canvas.appendChild(svg);
   for (const [id, v] of placed) {
     const p = store.person(id); if (!p) continue;
-    const el = nodeEl(p, { sel: id === state.selectedId, focus: id === focusId, hasMore: false });
+    const el = nodeEl(p, { sel: id === state.selectedId, focus: id === focusId });
     el.style.left = v.px = v.x + "px"; el.style.top = v.y + "px";
     canvas.appendChild(el);
     if (v.hasParents) {                                 // collapse/expand toggle
@@ -2157,6 +2182,7 @@ V.renderPedigree = function (vr) {
   }
   vr.appendChild(canvas);
   addCanvasControls(vr, "pedigree");
+  renderUpcoming(vr);
   attachCanvasInteractions(vr, canvas, "pedigree");
   hydrateAvatars(canvas);
   applyCam(canvas, "pedigree", { W, H });
@@ -2177,11 +2203,6 @@ function addCanvasControls(vr, view) {
   const cardsBtn = document.createElement("button"); cardsBtn.className = "btn"; cardsBtn.textContent = "🎴 Cards"; cardsBtn.title = "Customise how cards look";
   cardsBtn.addEventListener("click", openCardSettings);
   tl.appendChild(cardsBtn);
-  if (view === "family") {
-    const fg = document.createElement("button"); fg.className = "btn"; fg.textContent = "👪 Family group";
-    fg.addEventListener("click", () => openFamilyGroup(V.getFocus()));
-    tl.appendChild(fg);
-  }
   vr.appendChild(tl);
 
   const br = document.createElement("div"); br.className = "controls br";
@@ -2215,26 +2236,46 @@ function applyCam(canvas, view, dims) {
 }
 function zoomBy(f, view) {
   const canvas = curCanvas(); if (!canvas) return;
+  zoomAround(view, canvas, f, null);   // centred on the selected person (or viewport centre)
+}
+const ZOOM_MIN = 0.25, ZOOM_MAX = 2.0;
+function focusScreenPoint(view, canvas, cam) {
+  const fid = V.getFocus(); if (!fid) return null;
+  const node = canvas.querySelector(`.node[data-id="${CSS.escape(fid)}"]`); if (!node) return null;
+  const left = parseFloat(node.style.left), top = parseFloat(node.style.top);
+  return { x: (left + CARD_W / 2) * cam.s + cam.x, y: (top + CARD_H / 2) * cam.s + cam.y };
+}
+/* Zoom by factor f, keeping a pivot point fixed. Default pivot = the selected
+   person if on-screen, else the viewport centre. Clamped to a sensible range. */
+function zoomAround(view, canvas, f, pivot) {
   const stage = document.getElementById("stage");
-  const cx = stage.clientWidth / 2, cy = stage.clientHeight / 2;
+  const sw = stage.clientWidth, sh = stage.clientHeight;
   const cam = V.cam[view] || { s: 1, x: 0, y: 0 };
-  const s2 = Math.max(0.12, Math.min(3, cam.s * f));
-  cam.x = cx - (cx - cam.x) * (s2 / cam.s); cam.y = cy - (cy - cam.y) * (s2 / cam.s); cam.s = s2;
+  const s2 = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, cam.s * f));
+  if (Math.abs(s2 - cam.s) < 1e-4) return;
+  let px = sw / 2, py = sh / 2;
+  if (pivot) { px = pivot.x; py = pivot.y; }
+  else { const fp = focusScreenPoint(view, canvas, cam); if (fp && fp.x >= 0 && fp.x <= sw && fp.y >= 0 && fp.y <= sh) { px = fp.x; py = fp.y; } }
+  cam.x = px - (px - cam.x) * (s2 / cam.s);
+  cam.y = py - (py - cam.y) * (s2 / cam.s);
+  cam.s = s2;
   V.cam[view] = cam; applyCamTransform(canvas, cam);
 }
 function attachCanvasInteractions(vr, canvas, view) {
   const stage = document.getElementById("stage");
   // Cards are fixed: pressing anywhere (empty space OR a card) pans the canvas.
-  // A press-and-release without movement on a card counts as a click (selects it).
-  let panning = false, startX = 0, startY = 0, cam0 = null, downNodeId = null, moved = false;
+  // A press-and-release without movement selects the card, or opens the "+" add menu.
+  let panning = false, startX = 0, startY = 0, cam0 = null, downNodeId = null, downAddId = null, moved = false;
   const THRESH = 4;
   vr.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
-    if (e.target.closest(".controls")) return;   // let toolbar buttons/selects handle their own clicks
+    if (e.target.closest(".controls") || e.target.closest(".upcoming")) return;   // let overlay controls handle their own clicks
     const nodeHit = e.target.closest(".node");
+    const inCanvas = nodeHit && canvas.contains(nodeHit);
     const cam = V.cam[view] || { s: 1, x: 0, y: 0 };
     startX = e.clientX; startY = e.clientY; cam0 = { ...cam }; moved = false; panning = true;
-    downNodeId = (nodeHit && canvas.contains(nodeHit)) ? nodeHit.dataset.id : null;   // for click detection only
+    downAddId = (inCanvas && e.target.closest(".node-add")) ? nodeHit.dataset.id : null;
+    downNodeId = inCanvas ? nodeHit.dataset.id : null;
     vr.setPointerCapture(e.pointerId);
   });
   vr.addEventListener("pointermove", (e) => {
@@ -2243,20 +2284,17 @@ function attachCanvasInteractions(vr, canvas, view) {
     if (Math.abs(dx) + Math.abs(dy) > THRESH) moved = true;
     const cam = V.cam[view]; cam.x = cam0.x + dx; cam.y = cam0.y + dy; applyCamTransform(canvas, cam);
   });
-  vr.addEventListener("pointerup", () => {
+  vr.addEventListener("pointerup", (e) => {
     if (!panning) return;
-    if (!moved && downNodeId) onNodeClick(downNodeId, view);   // click on a card (no drag) = select
-    panning = false; downNodeId = null;
+    if (!moved && downAddId) {
+      const badge = canvas.querySelector(`.node[data-id="${CSS.escape(downAddId)}"] .node-add`);
+      openAddRelativeMenu(downAddId, badge);              // "+" button = add a relative
+    } else if (!moved && downNodeId) onNodeClick(downNodeId, view);   // card body = open details
+    panning = false; downNodeId = null; downAddId = null;
   });
   vr.addEventListener("wheel", (e) => {
     e.preventDefault();
-    const cam = V.cam[view] || { s: 1, x: 0, y: 0 };
-    const rect = stage.getBoundingClientRect();
-    const px = e.clientX - rect.left, py = e.clientY - rect.top;
-    const f = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-    const s2 = Math.max(0.12, Math.min(3, cam.s * f));
-    cam.x = px - (px - cam.x) * (s2 / cam.s); cam.y = py - (py - cam.y) * (s2 / cam.s); cam.s = s2;
-    V.cam[view] = cam; applyCamTransform(canvas, cam);
+    zoomAround(view, canvas, e.deltaY < 0 ? 1.15 : 1 / 1.15, null);   // centred on the selected person
   }, { passive: false });
 }
 function onNodeClick(id, view) {
@@ -2471,7 +2509,7 @@ function renderPanel() {
   // hero — the avatar is clickable to add/change the profile photo
   const hero = document.createElement("div"); hero.className = "hero";
   hero.innerHTML = `<div class="av addable" data-person="${p.id}" title="Click to add a photo">${U.escapeHtml(personInitials(p))}</div>
-    <div class="who"><div class="n">${U.escapeHtml(store.fullName(p))}</div><div class="s">${U.escapeHtml(lifespan(p) || "—")}</div></div>`;
+    <div class="who"><div class="n">${U.escapeHtml(store.displayName(p))}</div><div class="s">${U.escapeHtml(lifespan(p) || "—")}</div></div>`;
   hero.querySelector(".av").onclick = () => addPhotoTo(p.id);
   sb.appendChild(hero);
 
@@ -2502,7 +2540,7 @@ function renderPanel() {
   // Relationships
   sb.appendChild(el(`<div class="sec-title">Parents</div>`));
   for (const par of store.parents(p.id)) sb.appendChild(relRow(par, { role: par.sex === "M" ? "father" : par.sex === "F" ? "mother" : "parent", onRemove: () => { store.removeParent(p.id, par.id); renderPanel(); render(); } }));
-  sb.appendChild(addRelBtn("＋ Add parent", () => addRelation(p.id, "parent")));
+  sb.appendChild(addRelBtns([["＋ Add father", () => addRelative(p.id, "father")], ["＋ Add mother", () => addRelative(p.id, "mother")]]));
 
   sb.appendChild(el(`<div class="sec-title">Spouses / partners</div>`));
   for (const s of store.partners(p.id)) {
@@ -2512,14 +2550,15 @@ function renderPanel() {
     edit.onclick = () => editMarriage(p.id, s.person.id); row.insertBefore(edit, row.lastChild);
     sb.appendChild(row);
   }
-  sb.appendChild(addRelBtn("＋ Add spouse / partner", () => addRelation(p.id, "spouse")));
+  sb.appendChild(addRelBtn("＋ Add partner", () => addRelative(p.id, "partner")));
+
+  sb.appendChild(el(`<div class="sec-title">Siblings</div>`));
+  for (const s of store.siblings(p.id)) sb.appendChild(relRow(s, { role: s.sex === "M" ? "brother" : s.sex === "F" ? "sister" : "sibling" }));
+  sb.appendChild(addRelBtns([["＋ Add brother", () => addRelative(p.id, "brother")], ["＋ Add sister", () => addRelative(p.id, "sister")]]));
 
   sb.appendChild(el(`<div class="sec-title">Children</div>`));
   for (const c of store.children(p.id)) sb.appendChild(relRow(c, { onRemove: () => { store.removeParent(c.id, p.id); renderPanel(); render(); } }));
-  sb.appendChild(addRelBtn("＋ Add child", () => addRelation(p.id, "child")));
-
-  const sibs = store.siblings(p.id);
-  if (sibs.length) { sb.appendChild(el(`<div class="sec-title">Siblings</div>`)); for (const s of sibs) sb.appendChild(relRow(s)); }
+  sb.appendChild(addRelBtns([["＋ Add son", () => addRelative(p.id, "son")], ["＋ Add daughter", () => addRelative(p.id, "daughter")]]));
 
   // Photos
   sb.appendChild(el(`<div class="sec-title">Photos</div>`));
@@ -2555,32 +2594,55 @@ function renderPanel() {
 function refreshPanelHeader(id) {
   const p = S().person(id); if (!p) return;
   const h2 = document.querySelector("#sidePanel .sh h2"); if (h2) h2.textContent = S().displayName(p);
-  const n = document.querySelector("#sidePanel .hero .who .n"); if (n) n.textContent = S().fullName(p);
+  const n = document.querySelector("#sidePanel .hero .who .n"); if (n) n.textContent = S().displayName(p);
   const s = document.querySelector("#sidePanel .hero .who .s"); if (s) s.textContent = lifespan(p) || "—";
 }
 function el(html) { const d = document.createElement("div"); d.innerHTML = html; return d.firstElementChild; }
 function addRelBtn(label, onclick) { const b = document.createElement("button"); b.className = "btn mini"; b.textContent = label; b.onclick = onclick; const w = document.createElement("div"); w.appendChild(b); return w; }
+function addRelBtns(pairs) { const w = document.createElement("div"); w.className = "rel-add"; for (const [label, fn] of pairs) { const b = document.createElement("button"); b.className = "btn mini"; b.textContent = label; b.onclick = fn; w.appendChild(b); } return w; }
 
 /* ---------------------------------------------------------------------------
    Relationship editing (add parent/child/spouse via picker or new person)
    ------------------------------------------------------------------------- */
-async function addRelation(personId, kind) {
-  const store = S();
+const REL_TYPES = {
+  father:  { kind: "parent", sex: "M", title: "Add a father" },
+  mother:  { kind: "parent", sex: "F", title: "Add a mother" },
+  brother: { kind: "sibling", sex: "M", title: "Add a brother" },
+  sister:  { kind: "sibling", sex: "F", title: "Add a sister" },
+  son:     { kind: "child", sex: "M", title: "Add a son" },
+  daughter:{ kind: "child", sex: "F", title: "Add a daughter" },
+  partner: { kind: "spouse", sex: null, title: "Add a spouse / partner" }
+};
+/* Add a relative of a specific type. Asks new-vs-existing; a new person gets the
+   right sex preset. Everything is linked synchronously so it's one history step. */
+async function addRelative(personId, relType) {
+  const store = S(); const cfg = REL_TYPES[relType]; if (!cfg) return;
   const exclude = new Set([personId]);
-  if (kind === "parent") store.parents(personId).forEach(x => exclude.add(x.id));
-  const title = kind === "parent" ? "Add a parent" : kind === "child" ? "Add a child" : "Add a spouse / partner";
-  const choice = await chooseOrCreatePerson({ title, exclude });
+  if (cfg.kind === "parent") store.parents(personId).forEach(x => exclude.add(x.id));
+  const choice = await chooseOrCreatePerson({ title: cfg.title, exclude });
   if (!choice) return;
-  state.pendingLabel = kind === "parent" ? "Add parent" : kind === "child" ? "Add child" : "Add spouse";
-  const chosen = choice.id ? choice.id : store.addPerson(choice.create || {}).id;   // create+link stay one history step
+  state.pendingLabel = "Add " + relType;
+  let chosen;
+  if (choice.id) chosen = choice.id;
+  else { const fields = choice.create || {}; if (cfg.sex) fields.sex = cfg.sex; chosen = store.addPerson(fields).id; }
+  linkRelative(personId, chosen, cfg.kind);
+  renderPanel(); render();
+}
+function linkRelative(personId, chosen, kind) {
+  const store = S();
   if (kind === "parent") { const r = store.addParent(personId, chosen); if (!r.ok && !r.already) toast(r.reason, "err"); }
   else if (kind === "child") {
     const r = store.addParent(chosen, personId); if (!r.ok && !r.already) { toast(r.reason, "err"); return; }
     const parts = store.partners(personId);
     if (parts.length === 1) store.addParent(chosen, parts[0].person.id);   // auto-link the co-parent
   } else if (kind === "spouse") { store.addMarriage(personId, chosen, {}); }
-  renderPanel(); render();
+  else if (kind === "sibling") {
+    let parentIds = (store.person(personId).parentIds || []).slice();
+    if (!parentIds.length) { const ph = store.addPerson({}); store.addParent(personId, ph.id); parentIds = [ph.id]; }  // shared (placeholder) parent connects siblings
+    for (const pid of parentIds) store.addParent(chosen, pid);
+  }
 }
+FT.addRelative = addRelative;
 
 /* Ask first: create a brand-new person, or link an existing one.
    Returns { id } (existing), { create: {firstName,lastName} } (new), or null. */
@@ -2920,6 +2982,46 @@ function nextOccurrence(month, day, from) {
   if (d < from) d = new Date(y + 1, month - 1, day || 1);
   return d;
 }
+/* Upcoming birthdays + anniversaries within N days, soonest first. */
+function upcomingEvents(withinDays = 60) {
+  const store = S(); const today = new Date(); today.setHours(0, 0, 0, 0);
+  const items = [];
+  for (const p of store.people()) {
+    if (p.death) continue;
+    const b = p.birth && p.birth.date;
+    if (b && b.month) { const nx = nextOccurrence(b.month, b.day, today); const age = b.year ? nx.getFullYear() - b.year : null;
+      items.push({ when: nx, kind: "birthday", icon: "🎂", who: [p.id], text: `${store.displayName(p)}${age != null ? " turns " + age : "’s birthday"}` }); }
+  }
+  for (const m of store.marriages()) {
+    if (m.divorced || !m.date || !m.date.month) continue;
+    const sps = m.spouseIds.map(id => store.person(id)).filter(Boolean);
+    if (sps.length === 2 && sps.every(s => !s.death)) { const nx = nextOccurrence(m.date.month, m.date.day, today); const yrs = m.date.year ? nx.getFullYear() - m.date.year : null;
+      items.push({ when: nx, kind: "anniversary", icon: "💍", who: m.spouseIds, text: `${store.displayName(sps[0])} & ${store.displayName(sps[1])}${yrs != null ? " — " + yrs + " yrs" : ""}` }); }
+  }
+  items.sort((a, b) => a.when - b.when);
+  return items.filter(i => (i.when - today) / 86400000 <= withinDays);
+}
+/* Compact on-canvas reminder card (bottom-left). Dismissible for the session. */
+function renderUpcoming(vr) {
+  if (V.upcomingDismissed) return;
+  const items = upcomingEvents(45);
+  if (!items.length) return;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const box = document.createElement("div"); box.className = "upcoming";
+  const head = document.createElement("div"); head.className = "up-head"; head.innerHTML = `<span>🎂 Upcoming</span>`;
+  const x = document.createElement("button"); x.className = "up-x"; x.textContent = "✕"; x.title = "Hide for now";
+  x.onclick = () => { V.upcomingDismissed = true; box.remove(); };
+  head.appendChild(x); box.appendChild(head);
+  for (const it of items.slice(0, 3)) {
+    const days = Math.round((it.when - today) / 86400000);
+    const row = document.createElement("div"); row.className = "up-row";
+    row.innerHTML = `<span class="up-ic">${it.icon}</span><span class="up-t">${U.escapeHtml(it.text)}</span><span class="up-d">${days === 0 ? "today" : days === 1 ? "1d" : days + "d"}</span>`;
+    row.onclick = () => V.focusOn(it.who[0]);
+    box.appendChild(row);
+  }
+  if (items.length > 3) { const more = document.createElement("button"); more.className = "up-more"; more.textContent = `+ ${items.length - 3} more`; more.onclick = openReminders; box.appendChild(more); }
+  vr.appendChild(box);
+}
 async function openReminders() {
   const store = S(); const today = new Date(); today.setHours(0, 0, 0, 0);
   const items = [];
@@ -3083,66 +3185,57 @@ function toggleHistoryPanel(force) {
   if (open) renderHistoryPanel();
 }
 
-async function openSettings() {
-  const body = document.createElement("div");
-  const checkRow = (label, get, set, hint) => {
-    const w = document.createElement("div"); w.style.margin = "4px 0 12px";
-    const lab = document.createElement("label"); lab.className = "check-row"; lab.style.fontSize = "14.5px";
-    const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = get();
-    cb.onchange = () => set(cb.checked);
-    lab.appendChild(cb); lab.appendChild(document.createTextNode(" " + label));
-    w.appendChild(lab);
-    if (hint) { const h = document.createElement("div"); h.style.cssText = "font-size:12px;color:var(--ink-soft);margin-top:3px;margin-left:22px"; h.textContent = hint; w.appendChild(h); }
-    return w;
-  };
-  body.appendChild(el(`<div class="sec-title" style="margin-top:0;border:none;padding-top:0">Saving</div>`));
-  body.appendChild(checkRow("Autosave changes", () => prefs.autosave, (v) => {
-    prefs.autosave = v; savePrefs(); updateSaveState();
-    if (v && state.dirty && state.fileHandle) saveFlow(true);
-  }, "Automatically saves to your folder shortly after each change (Chrome/Edge). When off, use the Save button and you'll be reminded on close."));
+/* (Autosave & history settings now live directly in the ⚙️ menu.) */
 
-  body.appendChild(el(`<div class="sec-title">History (undo / redo)</div>`));
-  const stepsWrap = document.createElement("div"); stepsWrap.className = "field"; stepsWrap.style.maxWidth = "160px";
-  stepsWrap.innerHTML = `<label>Steps to keep</label>`;
-  const steps = document.createElement("input"); steps.type = "number"; steps.min = "1"; steps.max = "500"; steps.value = prefs.historyMax;
-  steps.onchange = () => { prefs.historyMax = Math.max(1, Math.min(500, parseInt(steps.value, 10) || 50)); steps.value = prefs.historyMax; savePrefs(); if (History.states.length > History.max + 1) { History.states = History.states.slice(History.states.length - (History.max + 1)); History.cur = Math.min(History.cur, History.states.length - 1); } History.refresh(); };
-  stepsWrap.appendChild(steps);
-  const histToggle = checkRow("Enable history", () => prefs.historyEnabled, (v) => {
-    prefs.historyEnabled = v; savePrefs();
-    if (v) History.init("Current"); else { History.states = []; History.cur = -1; }
-    History.refresh(); stepsWrap.style.display = v ? "" : "none";
-    if (!v) document.getElementById("historyPanel").classList.remove("open");
-  }, "Photoshop-style: step back through changes and forward again. Default 50 steps.");
-  body.appendChild(histToggle);
-  stepsWrap.style.display = prefs.historyEnabled ? "" : "none";
-  body.appendChild(stepsWrap);
-  await modal({ title: "Settings", body, actions: [{ label: "Done", value: true, kind: "primary" }] });
-}
-FT.openSettings = openSettings;
-
+const STEP_PRESETS = [10, 25, 50, 100, 200];
 function openMenu() {
   closeMenu();
   const pop = document.createElement("div"); pop.className = "menu-pop"; pop.id = "menuPop";
   const item = (label, fn) => { const b = document.createElement("button"); b.innerHTML = label; b.onclick = () => { closeMenu(); fn(); }; pop.appendChild(b); };
+  const toggleItem = (label, isOn, fn) => { const b = document.createElement("button"); b.innerHTML = `<span class="mi-check">${isOn ? "☑" : "☐"}</span> ${label}`; b.onclick = () => { fn(); openMenu(); }; pop.appendChild(b); };
   const sep = () => { const s = document.createElement("div"); s.className = "sep"; pop.appendChild(s); };
   item("🎴 Card display…", openCardSettings);
   item("🔗 Relationship finder", () => openRelationshipFinder(V.getFocus()));
   item("🎂 Birthdays & anniversaries", openReminders);
   item("✓ Data check", openValidation);
   sep();
+  toggleItem("Autosave changes", prefs.autosave, () => { prefs.autosave = !prefs.autosave; savePrefs(); updateSaveState(); if (prefs.autosave && state.dirty && state.fileHandle) saveFlow(true); });
+  toggleItem("History (undo / redo)", prefs.historyEnabled, () => { prefs.historyEnabled = !prefs.historyEnabled; savePrefs(); if (prefs.historyEnabled) History.init("Current"); else { History.states = []; History.cur = -1; } History.refresh(); });
+  if (prefs.historyEnabled) item(`<span class="mi-check">↔</span> History keeps ${prefs.historyMax} steps`, () => { const i = STEP_PRESETS.indexOf(prefs.historyMax); prefs.historyMax = STEP_PRESETS[(i + 1) % STEP_PRESETS.length]; savePrefs(); if (History.states.length > History.max + 1) { History.states = History.states.slice(History.states.length - (History.max + 1)); History.cur = Math.min(History.cur, History.states.length - 1); } History.refresh(); openMenu(); });
+  sep();
   item("🖨️ Print / PDF this person’s sheet", printBranch);
   item("⬇️ Download a copy (JSON)", downloadJSON);
   sep();
   item("📂 Open another tree", () => { if (!state.dirty || confirm("Discard unsaved changes and open another tree?")) loadTreeFlow(); });
   item("✳️ New tree", () => { if (!state.dirty || confirm("Discard unsaved changes and start a new tree?")) newTreeFlow(); });
-  sep();
-  item("⚙️ Settings", openSettings);
   item("ℹ️ About", openAbout);
   document.body.appendChild(pop);
   setTimeout(() => document.addEventListener("pointerdown", menuOutside), 0);
 }
 function menuOutside(e) { const pop = document.getElementById("menuPop"); if (pop && !pop.contains(e.target) && e.target.id !== "btnMenu") closeMenu(); }
 function closeMenu() { const pop = document.getElementById("menuPop"); if (pop) pop.remove(); document.removeEventListener("pointerdown", menuOutside); }
+
+/* Card "+" button → popup to add a relative of a chosen type. */
+function openAddRelativeMenu(personId, anchorEl) {
+  closeAddMenu();
+  const pop = document.createElement("div"); pop.className = "menu-pop add-pop"; pop.id = "addPop";
+  const item = (label, relType) => { const b = document.createElement("button"); b.innerHTML = label; b.onclick = () => { closeAddMenu(); addRelative(personId, relType); }; pop.appendChild(b); };
+  const sep = () => { const s = document.createElement("div"); s.className = "sep"; pop.appendChild(s); };
+  item("👨 Add father", "father"); item("👩 Add mother", "mother"); sep();
+  item("👦 Add brother", "brother"); item("👧 Add sister", "sister"); sep();
+  item("💍 Add partner", "partner"); sep();
+  item("👶 Add son", "son"); item("👧 Add daughter", "daughter");
+  document.body.appendChild(pop);
+  pop.style.position = "fixed";
+  const r = anchorEl ? anchorEl.getBoundingClientRect() : { left: innerWidth / 2, right: innerWidth / 2, top: 100, bottom: 120 };
+  const pw = pop.offsetWidth || 210, ph = pop.offsetHeight || 320;
+  let left = Math.min(r.left, innerWidth - pw - 8), top = r.bottom + 6;
+  if (top + ph > innerHeight - 8) top = Math.max(8, r.top - ph - 6);
+  pop.style.left = Math.max(8, left) + "px"; pop.style.top = top + "px";
+  setTimeout(() => document.addEventListener("pointerdown", addMenuOutside, true), 0);
+}
+function addMenuOutside(e) { const pop = document.getElementById("addPop"); if (pop && !pop.contains(e.target)) closeAddMenu(); }
+function closeAddMenu() { const pop = document.getElementById("addPop"); if (pop) pop.remove(); document.removeEventListener("pointerdown", addMenuOutside, true); }
 async function openAbout() {
   await modal({ title: "About Family Tree", body: `<p style="line-height:1.6">A private, offline family tree. Your data lives in <b>tree-data.json</b> and a <b>photos/</b> folder inside the folder you chose — copy that folder anywhere to move or back up your whole tree.</p><p style="line-height:1.6;color:var(--ink-soft)">Single file · no accounts · no internet required. Works best in Chrome or Edge, where Save writes straight back to your folder.</p>`, actions: [{ label: "Close", value: true, kind: "primary" }] });
 }
