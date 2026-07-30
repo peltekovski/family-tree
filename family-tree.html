@@ -283,6 +283,10 @@ a{color:var(--accent)}
 .hempty{color:var(--ink-soft);font-size:13.5px;padding:34px 18px;text-align:center;line-height:1.9}
 .side .sh{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
 .side .sh h2{font-size:18px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.focus-btn{gap:6px;white-space:nowrap}
+.focus-btn .fb-ic{font-size:13px;line-height:1}
+.focus-btn.on{background:#f2ebdd;border-color:var(--accent-soft);color:var(--accent);opacity:1;cursor:default}
+.focus-btn:disabled{opacity:1}
 .side .sb{padding:14px 16px;overflow:auto;flex:1}
 .side .sf{padding:12px 16px;border-top:1px solid var(--line);display:flex;gap:8px;flex-wrap:wrap}
 .side .hero{display:flex;gap:12px;align-items:center;margin-bottom:12px}
@@ -388,7 +392,11 @@ a{color:var(--accent)}
 .menu-pop button:hover{background:#f3ede1}
 .menu-pop .sep{height:1px;background:var(--line);margin:5px 4px}
 .menu-pop .mi-check{flex:0 0 18px;text-align:center;opacity:.9}
-.add-pop{min-width:180px}
+/* the add-relative popup is positioned by JS (left/top), so the inherited
+   right:14px must be cleared or the box stretches across the screen */
+.add-pop{position:fixed;right:auto;top:auto;min-width:0;width:196px;max-width:60vw;padding:5px}
+.add-pop button{padding:7px 9px;font-size:13.5px;gap:8px}
+.add-pop .sep{margin:3px 4px}
 /* upcoming birthdays / anniversaries widget on the canvas */
 .upcoming{position:absolute;left:14px;bottom:14px;z-index:8;background:var(--panel);border:1px solid var(--line-strong);border-radius:12px;
   box-shadow:var(--shadow);width:250px;max-width:62vw;overflow:hidden;font-size:13px}
@@ -404,6 +412,12 @@ a{color:var(--accent)}
 .up-d{color:var(--accent);font-weight:600;font-variant-numeric:tabular-nums;flex:0 0 auto}
 .up-more{display:block;width:100%;text-align:center;border:none;background:transparent;padding:7px;color:var(--accent);cursor:pointer;font-size:12.5px;border-top:1px solid var(--line)}
 .up-more:hover{background:#f5efe3}
+/* collapsed state — a small cake button that brings the panel back */
+.upcoming-pill{position:absolute;left:14px;bottom:14px;z-index:8;display:flex;align-items:center;gap:5px;
+  background:var(--panel);border:1px solid var(--line-strong);border-radius:20px;box-shadow:var(--shadow);
+  padding:7px 12px;font-size:15px;cursor:pointer;line-height:1}
+.upcoming-pill:hover{border-color:var(--accent-soft);background:#faf6ee}
+.upcoming-pill .up-count{font-size:11.5px;font-weight:700;color:#fff;background:var(--accent);border-radius:9px;padding:1px 6px}
 
 /* Photo tagging modal */
 .tagger{display:flex;gap:16px;flex-wrap:wrap}
@@ -1143,7 +1157,7 @@ FT.markDirty = markDirty; FT.markClean = markClean;
 /* ==== SECTION: Preferences (app-level, saved in localStorage) ============== */
 const PREFS_KEY = "familytree_prefs";
 const prefs = FT.prefs = Object.assign(
-  { autosave: true, historyEnabled: true, historyMax: 50 },
+  { autosave: true, historyEnabled: true, historyMax: 50, upcomingHidden: false },
   (() => { try { return JSON.parse(localStorage.getItem(PREFS_KEY)) || {}; } catch (e) { return {}; } })()
 );
 function savePrefs() { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (e) { /* file:// / private mode */ } }
@@ -1238,7 +1252,7 @@ function openTree(data, { dirHandle = null, fileHandle = null, historyLabel = "O
   state.currentView = (data.settings && data.settings.defaultView) || "family";
   state._search = "";
   state.pendingLabel = null;
-  if (FT.views) { FT.views.cam = { family: null, pedigree: null }; FT.views.collapsed = new Set(); FT.views.upcomingDismissed = false; }
+  if (FT.views) { FT.views.cam = { family: null, pedigree: null }; FT.views.collapsed = new Set(); }
   const sp = document.getElementById("sidePanel"); if (sp) sp.classList.remove("open");
 
   document.getElementById("startScreen").classList.add("hidden");
@@ -1874,7 +1888,7 @@ function cardDisplay() {
   if (sexColor === true || sexColor === undefined) sexColor = "bar";
   else if (sexColor === false) sexColor = "none";
   return {
-    showPhoto: d.showPhoto !== false, sexColor, showMaiden: d.showMaiden !== false,
+    showPhoto: d.showPhoto !== false, sexColor,
     size: d.size || "normal", line1: d.line1 || "years", line2: d.line2 || "none"
   };
 }
@@ -2035,11 +2049,24 @@ function computeHourglass(focusId, genUp, genDown) {
   measure(downRoot); place(downRoot, 0, rootGen);
 
   const midXof = (n) => n.x + (n.partnerId ? (CARD_W + COUPLE_GAP / 2) : CARD_W / 2);
+  /* Which of a couple sits on the left. Fixed by sex (man left) — never by who
+     happens to be in focus, so selecting a spouse can't swap the two cards. */
+  function orderCouple(aId, bId) {
+    const a = store.person(aId), b = store.person(bId);
+    const rank = (p) => (p && p.sex === "M") ? 0 : (p && p.sex === "F") ? 2 : 1;
+    const ra = rank(a), rb = rank(b);
+    if (ra !== rb) return ra < rb ? [aId, bId] : [bId, aId];
+    return [aId, bId];                       // same/unknown sex: keep insertion order
+  }
   function collectDown(n) {
-    placed.set(n.id, { x: n.x, gen: n.gen, partnerId: n.partnerId, marriage: n.marriage });
-    if (n.partnerId && store.person(n.partnerId) && !placed.has(n.partnerId)) {
-      placed.set(n.partnerId, { x: n.x + CARD_W + COUPLE_GAP, gen: n.gen, partnerId: null, marriage: null, satellite: true });
-      spouseEdges.push({ aId: n.id, divorced: n.marriage && n.marriage.divorced });
+    const partnerId = (n.partnerId && store.person(n.partnerId) && !placed.has(n.partnerId)) ? n.partnerId : null;
+    if (partnerId) {
+      const [leftId, rightId] = orderCouple(n.id, partnerId);
+      placed.set(leftId, { x: n.x, gen: n.gen, partnerId: rightId, marriage: n.marriage });
+      placed.set(rightId, { x: n.x + CARD_W + COUPLE_GAP, gen: n.gen, partnerId: leftId, marriage: n.marriage, satellite: true });
+      spouseEdges.push({ aId: leftId, divorced: n.marriage && n.marriage.divorced });
+    } else if (!placed.has(n.id)) {
+      placed.set(n.id, { x: n.x, gen: n.gen, partnerId: n.partnerId, marriage: n.marriage });
     }
     for (const c of n.children) { pcEdges.push({ pMidX: midXof(n), pGen: n.gen, cMidX: c.x + CARD_W / 2, cGen: c.gen }); collectDown(c); }
   }
@@ -2077,7 +2104,7 @@ function computeHourglass(focusId, genUp, genDown) {
     if (tops.length) {
       const synth = { synthetic: true, w: forcedPartner ? (2 * CARD_W + COUPLE_GAP) : CARD_W, children: tops.map(t => t.sub) };
       measureUp(synth); placeUp(synth, 0, rootGen);
-      const shift = placed.get(rootId).x - synth.x;
+      const shift = downRoot.x - synth.x;      // block-edge to block-edge (couple order may vary)
       const collectUp = (n, childId) => {
         if (!placed.has(n.id)) placed.set(n.id, { x: n.x + shift, gen: n.gen, partnerId: null, marriage: null });
         const cp = placed.get(childId), np = placed.get(n.id);
@@ -2085,6 +2112,48 @@ function computeHourglass(focusId, genUp, genDown) {
         for (const par of n.parents) collectUp(par, n.id);
       };
       for (const t of tops) collectUp(t.sub, t.childId);
+    }
+  }
+
+  /* Collaterals — the ancestors' *other* children (your aunts & uncles, their
+     partners and their children) plus the same one level further up. Each block is
+     laid out on its own, then slid into free space beside the main tree. */
+  {
+    const rowRange = new Map();                        // gen -> [minX, maxX] already taken
+    const noteRow = (gen, x0, x1) => { const r = rowRange.get(gen); if (!r) rowRange.set(gen, [x0, x1]); else { r[0] = Math.min(r[0], x0); r[1] = Math.max(r[1], x1); } };
+    for (const [, v] of placed) noteRow(v.gen, v.x, v.x + CARD_W);
+    let gMin = Infinity, gMax = -Infinity;
+    for (const [, r] of rowRange) { gMin = Math.min(gMin, r[0]); gMax = Math.max(gMax, r[1]); }
+    const centre = (gMin + gMax) / 2;
+    const span = (n, acc) => { acc.minG = Math.min(acc.minG, n.gen); acc.maxG = Math.max(acc.maxG, n.gen);
+      acc.minX = Math.min(acc.minX, n.x); acc.maxX = Math.max(acc.maxX, n.x + effW(n)); n.children.forEach(c => span(c, acc)); return acc; };
+    const shiftBy = (n, dx) => { n.x += dx; n.children.forEach(c => shiftBy(c, dx)); };
+
+    // nearest ancestors first, so uncles sit closer in than great-uncles
+    const ancestors = [...placed.entries()].filter(([, v]) => v.gen < rootGen).sort((a, b) => b[1].gen - a[1].gen);
+    for (const [ancId, ancV] of ancestors) {
+      for (const child of store.children(ancId)) {
+        if (seen.has(child.id)) continue;              // already on the direct line
+        const sub = buildDown(child.id, Math.max(1, genDown));
+        measure(sub); place(sub, 0, ancV.gen + 1);
+        const s = span(sub, { minG: Infinity, maxG: -Infinity, minX: Infinity, maxX: -Infinity });
+        let occMin = Infinity, occMax = -Infinity;
+        for (let g = s.minG; g <= s.maxG; g++) { const r = rowRange.get(g); if (r) { occMin = Math.min(occMin, r[0]); occMax = Math.max(occMax, r[1]); } }
+        const GAP = GAP_X * 1.6;
+        let dx;
+        if (occMin === Infinity) dx = ancV.x - s.minX;                        // row is free
+        else if (ancV.x + CARD_W / 2 < centre) dx = occMin - GAP - s.maxX;    // hang on the nearer side
+        else dx = occMax + GAP - s.minX;
+        shiftBy(sub, dx);
+        collectDown(sub);
+        for (let g = s.minG; g <= s.maxG; g++) noteRow(g, s.minX + dx, s.maxX + dx);
+        // connect the collateral to whichever of its parents are on screen
+        const cp = placed.get(child.id);
+        if (cp) for (const par of store.person(child.id).parentIds) {
+          const pv = placed.get(par);
+          if (pv) pcEdges.push({ pMidX: pv.x + CARD_W / 2, pGen: pv.gen, cMidX: cp.x + CARD_W / 2, cGen: cp.gen });
+        }
+      }
     }
   }
 
@@ -2352,9 +2421,12 @@ function attachCanvasInteractions(vr, canvas, view) {
     zoomAround(view, canvas, e.deltaY < 0 ? 1.12 : 1 / 1.12, null);   // centred on the selected person
   }, { passive: false });
 }
+/* Clicking a card opens that person's details. It deliberately does NOT change
+   which person the tree is built around — use the panel's Focus button for that,
+   so the layout (and the order of a couple) never shifts under you. */
 function onNodeClick(id, view) {
   state.selectedId = id;
-  if (view === "family" || view === "pedigree") { state.focusId = id; render(); }
+  render();
   openPanel(id);
 }
 V.focusOn = function (id) {
@@ -2539,7 +2611,7 @@ function relRow(person, { role, onRemove } = {}) {
   const row = document.createElement("div"); row.className = "rel-row";
   row.innerHTML = `<span class="av" data-person="${person.id}">${U.escapeHtml(personInitials(person))}</span>
     <span class="rn">${U.escapeHtml(S().displayName(person))} <small>${U.escapeHtml(lifespan(person))}${role ? " · " + role : ""}</small></span>`;
-  row.querySelector(".rn").onclick = () => { state.selectedId = person.id; if (state.currentView === "family" || state.currentView === "pedigree") { state.focusId = person.id; render(); } openPanel(person.id); };
+  row.querySelector(".rn").onclick = () => { state.selectedId = person.id; render(); openPanel(person.id); };   // browse without re-rooting the tree
   if (onRemove) { const x = document.createElement("span"); x.className = "x"; x.textContent = "✕"; x.title = "Remove link"; x.onclick = onRemove; row.appendChild(x); }
   return row;
 }
@@ -2553,10 +2625,17 @@ function renderPanel() {
 
   const sh = document.createElement("div"); sh.className = "sh";
   sh.innerHTML = `<h2>${U.escapeHtml(store.displayName(p))}</h2>`;
-  const centerBtn = document.createElement("button"); centerBtn.className = "btn sm ghost icon-btn"; centerBtn.textContent = "◎"; centerBtn.title = "Center family view on this person";
-  centerBtn.onclick = () => { state.currentView = "family"; state.focusId = p.id; V.cam.family = null; render(); };
+  // Focus = build the tree around this person. The panel can show anyone, so this
+  // is only lit when the person you're editing *is* the one in focus.
+  const isFocused = p.id === V.getFocus();
+  const focusBtn = document.createElement("button");
+  focusBtn.className = "btn sm focus-btn" + (isFocused ? " on" : "");
+  focusBtn.innerHTML = `<span class="fb-ic">🎯</span><span>${isFocused ? "In focus" : "Focus"}</span>`;
+  focusBtn.title = isFocused ? "The tree is already built around this person" : "Build the tree around this person";
+  focusBtn.disabled = isFocused;
+  focusBtn.onclick = () => { state.currentView = "family"; state.focusId = p.id; V.cam.family = null; render(); renderPanel(); };
   const x = document.createElement("button"); x.className = "btn ghost icon-btn"; x.textContent = "✕"; x.onclick = closePanel;
-  sh.appendChild(centerBtn); sh.appendChild(x);
+  sh.appendChild(focusBtn); sh.appendChild(x);
   panel.appendChild(sh);
 
   const sb = document.createElement("div"); sb.className = "sb";
@@ -2599,10 +2678,12 @@ function renderPanel() {
 
   sb.appendChild(el(`<div class="sec-title">Spouses / partners</div>`));
   for (const s of store.partners(p.id)) {
-    const role = s.marriage ? (s.marriage.divorced ? "divorced" : "married" + (s.marriage.date ? " " + U.yearOf(s.marriage.date) : "")) : "partner";
-    const row = relRow(s.person, { role, onRemove: () => { const m = store.findMarriage(p.id, s.person.id); if (m) store.removeMarriage(m.id); renderPanel(); render(); } });
+    const kids = s.children.length;
+    const role = (s.marriage ? (s.marriage.divorced ? "divorced" : "married" + (s.marriage.date ? " " + U.yearOf(s.marriage.date) : "")) : "partner")
+      + (kids ? ` · ${kids} child${kids > 1 ? "ren" : ""}` : "");
+    const row = relRow(s.person, { role, onRemove: () => removePartnerFlow(p.id, s.person.id) });
     const edit = document.createElement("span"); edit.className = "x"; edit.textContent = "✎"; edit.title = "Marriage details"; edit.style.color = "var(--accent)";
-    edit.onclick = () => editMarriage(p.id, s.person.id); row.insertBefore(edit, row.lastChild);
+    if (s.marriage) { edit.onclick = () => editMarriage(p.id, s.person.id); row.insertBefore(edit, row.lastChild); }
     sb.appendChild(row);
   }
   sb.appendChild(addRelBtn("＋ Add partner", () => addRelative(p.id, "partner")));
@@ -2684,17 +2765,37 @@ async function addRelative(personId, relType) {
   if (cfg.kind === "spouse") store.partners(personId).forEach(x => exclude.add(x.person.id));
   const choice = await chooseOrCreatePerson({ title: cfg.title, exclude });
   if (!choice) return;
+
+  // Adding a partner to someone who already has children: ask whether those
+  // children are the new partner's too, rather than assuming it.
+  let linkChildren = false;
+  if (cfg.kind === "spouse") {
+    const solo = store.soleChildren(personId);
+    if (solo.length) {
+      const names = solo.map(c => "<li>" + U.escapeHtml(store.displayName(c)) + "</li>").join("");
+      const ans = await modal({
+        title: "Are these their children too?",
+        body: `<p style="line-height:1.6"><b>${U.escapeHtml(store.displayName(anchor))}</b> has ${solo.length === 1 ? "a child" : "children"} with no second parent recorded:</p>
+               <ul style="margin:6px 0 12px 20px;line-height:1.6">${names}</ul>
+               <p style="line-height:1.6;color:var(--ink-soft)">Should the new partner be recorded as their other parent?</p>`,
+        actions: [{ label: "No, just the partner", value: "no" }, { label: "Yes, link them", value: "yes", kind: "primary" }]
+      });
+      if (ans === null) return;                 // closed/escaped = cancel the whole thing
+      linkChildren = ans === "yes";
+    }
+  }
+
   state.pendingLabel = "Add " + relType;
   // A partner has no fixed sex — default to the opposite of this person's.
   const presetSex = cfg.sex || (cfg.kind === "spouse" ? (OPPOSITE_SEX[anchor.sex] || null) : null);
   let chosen;
   if (choice.id) chosen = choice.id;
   else { const fields = choice.create || {}; if (presetSex) fields.sex = presetSex; chosen = store.addPerson(fields).id; }
-  linkRelative(personId, chosen, cfg.kind);
+  linkRelative(personId, chosen, cfg.kind, { linkChildren });
   if (!state.focusId) state.focusId = homePersonId() || personId;   // never let a new person steal the focus
   renderPanel(); render();
 }
-function linkRelative(personId, chosen, kind) {
+function linkRelative(personId, chosen, kind, opts = {}) {
   const store = S();
   if (kind === "parent") {
     const r = store.addParent(personId, chosen); if (!r.ok && !r.already) { toast(r.reason, "err"); return; }
@@ -2712,10 +2813,8 @@ function linkRelative(personId, chosen, kind) {
     if (parts.length === 1) store.addParent(chosen, parts[0].person.id);   // auto-link the co-parent
   } else if (kind === "spouse") {
     store.addMarriage(personId, chosen, {});
-    // Children who so far have only this one parent are almost always the couple's.
-    const solo = store.soleChildren(personId);
-    for (const c of solo) store.addParent(c.id, chosen);
-    if (solo.length) toast(`Also linked ${solo.length} child${solo.length > 1 ? "ren" : ""} to ${store.displayName(chosen)}.`, "ok", 4200);
+    // Only adopt the existing children when the caller explicitly confirmed it.
+    if (opts.linkChildren) for (const c of store.soleChildren(personId)) store.addParent(c.id, chosen);
   } else if (kind === "sibling") {
     let parentIds = (store.person(personId).parentIds || []).slice();
     if (!parentIds.length) { const ph = store.addPerson({ firstName: "Unknown" }); store.addParent(personId, ph.id); parentIds = [ph.id]; }  // shared parent is what makes them siblings
@@ -2793,6 +2892,46 @@ function pickPerson({ title = "Choose a person", exclude = new Set(), allowCreat
     modal({ title, body, actions: [{ label: "Cancel", value: null }], onBody: (bodyEl, resolver) => { done = (v) => resolver(v); search.focus(); } }).then((v) => resolve(v));
     search.addEventListener("input", draw); draw();
   });
+}
+
+/* Unlink a partner. A "partner" can be a marriage, a co-parent (they share a
+   child), or both — so remove whichever links actually exist. */
+async function removePartnerFlow(aId, bId) {
+  const store = S();
+  const a = store.person(aId), b = store.person(bId); if (!a || !b) return;
+  const marriage = store.findMarriage(aId, bId);
+  const shared = store.childrenOfCouple(aId, bId);
+  const bName = U.escapeHtml(store.displayName(b)), aName = U.escapeHtml(store.displayName(a));
+  const kidList = shared.map(c => "<li>" + U.escapeHtml(store.displayName(c)) + "</li>").join("");
+
+  if (!marriage && !shared.length) return;
+
+  const kidsWord = shared.length === 1 ? "this child" : "these children";
+  let choice;
+  if (shared.length) {
+    // They're tied together by shared children, so one of them has to stop being a
+    // parent. Say plainly who that would be — either direction may be the mistake.
+    const note = marriage
+      ? `<p style="line-height:1.6"><b>${bName}</b> is ${aName}’s partner and they share ${kidsWord}:</p>`
+      : `<p style="line-height:1.6"><b>${bName}</b> only counts as a partner because they share ${kidsWord} with <b>${aName}</b>:</p>`;
+    choice = await modal({
+      title: "Remove partner",
+      body: `${note}<ul style="margin:6px 0 12px 20px;line-height:1.6">${kidList}</ul>
+             <p style="line-height:1.6;color:var(--ink-soft)">Nobody is deleted — only the parent link is removed.</p>`,
+      actions: [{ label: "Cancel", value: null }]
+        .concat(marriage ? [{ label: "Just end the marriage", value: "marriage" }] : [])
+        .concat([{ label: `${bName} isn’t the parent`, value: "dropB", kind: "danger" },
+                 { label: `${aName} isn’t the parent`, value: "dropA", kind: "danger" }])
+    });
+  } else choice = "marriage";
+
+  if (!choice) return;
+  state.pendingLabel = "Remove partner";
+  if (marriage) store.removeMarriage(marriage.id);
+  if (choice === "dropB") for (const c of shared) store.removeParent(c.id, bId);
+  if (choice === "dropA") for (const c of shared) store.removeParent(c.id, aId);
+  renderPanel(); render();
+  toast("Link removed.", "ok", 2600);
 }
 
 async function editMarriage(aId, bId) {
@@ -3084,14 +3223,24 @@ function upcomingEvents(withinDays = 60) {
 }
 /* Compact on-canvas reminder card (bottom-left). Dismissible for the session. */
 function renderUpcoming(vr) {
-  if (V.upcomingDismissed) return;
   const items = upcomingEvents(45);
   if (!items.length) return;
   const today = new Date(); today.setHours(0, 0, 0, 0);
+
+  // Collapsed: leave a small cake button in the corner so it can always come back.
+  if (prefs.upcomingHidden) {
+    const pill = document.createElement("button");
+    pill.className = "upcoming-pill"; pill.innerHTML = `🎂<span class="up-count">${items.length}</span>`;
+    pill.title = "Show upcoming birthdays & anniversaries";
+    pill.onclick = () => { prefs.upcomingHidden = false; savePrefs(); render(); };
+    vr.appendChild(pill);
+    return;
+  }
+
   const box = document.createElement("div"); box.className = "upcoming";
   const head = document.createElement("div"); head.className = "up-head"; head.innerHTML = `<span>🎂 Upcoming</span>`;
-  const x = document.createElement("button"); x.className = "up-x"; x.textContent = "✕"; x.title = "Hide for now";
-  x.onclick = () => { V.upcomingDismissed = true; box.remove(); };
+  const x = document.createElement("button"); x.className = "up-x"; x.textContent = "✕"; x.title = "Hide (a 🎂 button stays in the corner)";
+  x.onclick = () => { prefs.upcomingHidden = true; savePrefs(); render(); };
   head.appendChild(x); box.appendChild(head);
   for (const it of items.slice(0, 3)) {
     const days = Math.round((it.when - today) / 86400000);
@@ -3198,7 +3347,6 @@ async function openCardSettings() {
   body.appendChild(el(`<div class="sec-title" style="margin-top:14px">Show / hide</div>`));
   const checks = document.createElement("div"); checks.className = "check-grid";
   checks.appendChild(checkRow("Photo", "showPhoto"));
-  checks.appendChild(checkRow("Maiden name", "showMaiden"));
   body.appendChild(checks);
   await modal({ title: "Card display", body, actions: [{ label: "Done", value: true, kind: "primary" }] });
 }
