@@ -22,8 +22,11 @@ cp family-tree.html "$HOME/Desktop/Family Tree/family-tree.html"
 
 ## Features
 - **Views:** Family (hourglass of ancestors + descendants + spouses/siblings), Pedigree (direct ancestors, collapsible), List (sortable, searchable), Timeline (life events by decade).
-- **Canvas:** pan and zoom (drag anywhere — including over a card — to move around; cards stay put), adjustable generation depth.
-- **Autosave & history:** changes autosave to your folder (toggle in ⚙️ Settings); a Photoshop-style **History** panel (🕘) lets you step back and forward through changes (undo/redo, or click any step), with a configurable number of steps (default 50).
+- **Canvas:** pan and zoom (drag anywhere — including over a card — to move around; cards stay put), adjustable generation depth. Zoom stays within sensible limits and keeps the person in focus centred.
+- **Cards:** each card has a **＋** at the bottom to add a relative (father, mother, brother, sister, partner, son, daughter — new or existing) and a **👪** at the top for that person's immediate family. Clicking the card itself opens their details.
+- **"Me":** mark one person as you (**🏠** button, or *This is me* in their panel). The tree centres on you, you get a ★ badge, and adding people never steals your focus. The person the tree is built around is ringed and labelled **IN FOCUS**.
+- **Upcoming birthdays** appear right on the tree (bottom-left), not buried in a menu.
+- **Autosave & history:** changes autosave to your folder (toggle in the ⚙️ menu); a Photoshop-style **History** panel (🕘) lets you step back and forward through changes (undo/redo, or click any step), with a configurable number of steps (default 50).
 - **Card display (🎴 Cards / menu → Card display):** choose card size, colour by sex (side bar, whole card, or none), what the two lines under each name show (years, full dates, occupation, birthplace…), and toggle the photo and maiden name.
 - **Click-to-edit** side panel: names, dates/places, education, occupation, notes, marriages (with divorce), parents/children/spouses.
 - **Search** across the whole tree.

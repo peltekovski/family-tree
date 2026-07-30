@@ -175,25 +175,34 @@ a{color:var(--accent)}
 .node{position:absolute;width:var(--card-w);background:var(--panel);border:1px solid var(--line-strong);
   border-radius:12px;box-shadow:0 1px 3px rgba(40,30,15,.10);padding:10px 12px;cursor:pointer;
   display:flex;gap:10px;align-items:center;user-select:none;transition:box-shadow .12s,border-color .12s;border-left-width:4px}
-.node:hover{box-shadow:var(--shadow);border-color:var(--accent-soft)}
-.node.sel{border-color:var(--accent);box-shadow:0 0 0 3px rgba(122,92,62,.22),var(--shadow)}
-.node.focus{border-color:var(--accent)}
-.node.male{border-color:#9dbcd5;border-left-color:var(--male)} .node.female{border-color:#d7abb9;border-left-color:var(--female)} .node.unknown{border-color:#cabfad;border-left-color:var(--neutral)}
+.node:hover{box-shadow:var(--shadow)}
+.node.sel{box-shadow:0 0 0 3px rgba(122,92,62,.22),var(--shadow)}
+/* the person the tree is currently built around — unmistakable ring + lift */
+.node.focus{box-shadow:0 0 0 3px var(--accent),0 0 0 7px rgba(122,92,62,.18),0 6px 18px rgba(40,30,15,.22);z-index:3}
+.node.focus::after{content:"IN FOCUS";position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:var(--accent);
+  color:#fff;font-size:8.5px;font-weight:700;letter-spacing:.09em;padding:2px 7px;border-radius:9px;white-space:nowrap;box-shadow:0 1px 3px rgba(40,30,15,.3)}
+/* sex colour as a full 2px stroke, with a thicker left bar */
+.node.male{border-color:var(--male);border-left-color:var(--male)} .node.female{border-color:var(--female);border-left-color:var(--female)} .node.unknown{border-color:var(--neutral);border-left-color:var(--neutral)}
+.node.male,.node.female,.node.unknown{border-width:2px;border-left-width:6px}
 .node .av{width:44px;height:44px;border-radius:50%;flex:0 0 44px;background:#efe7d8 center/cover no-repeat;
   display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--ink-soft);overflow:hidden;border:1px solid var(--line)}
 .node .av img{width:100%;height:100%;object-fit:cover}
 .node .meta{min-width:0;flex:1}
 .node .nm{font-weight:600;font-size:13.5px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .node .dt{font-size:11.5px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
-/* "+" add-relative button (top-right) — subtle, brightens on hover */
-.node .node-add{position:absolute;top:-9px;right:-9px;width:22px;height:22px;padding:0;border-radius:50%;border:none;
-  background:var(--accent);color:#fff;font-size:15px;line-height:1;display:flex;align-items:center;justify-content:center;
-  cursor:pointer;box-shadow:0 1px 3px rgba(40,30,15,.3);opacity:.55;transition:opacity .12s,transform .1s}
-.node:hover .node-add{opacity:1}
-.node .node-add:hover{transform:scale(1.15)}
-/* small deceased marker (top-left corner) */
+/* "+" add-relative button (bottom-centre) and 👪 family button (top-right) */
+.node .node-add,.node .node-fam{position:absolute;padding:0;border-radius:50%;border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;line-height:1;box-shadow:0 1px 3px rgba(40,30,15,.3);
+  opacity:.5;transition:opacity .12s,transform .1s}
+.node .node-add{bottom:-11px;left:50%;margin-left:-11px;width:22px;height:22px;background:var(--accent);color:#fff;font-size:15px}
+.node .node-fam{top:-10px;right:-10px;width:21px;height:21px;background:var(--panel);border:1px solid var(--line-strong);font-size:11px}
+.node:hover .node-add,.node:hover .node-fam,.node.focus .node-add{opacity:1}
+.node .node-add:hover,.node .node-fam:hover{transform:scale(1.16);opacity:1}
+/* small corner markers */
 .node .dead-badge{position:absolute;top:-8px;left:-8px;width:19px;height:19px;border-radius:50%;background:#8b8177;color:#fff;
   font-size:12px;line-height:1;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 2px rgba(40,30,15,.3);border:1.5px solid var(--panel)}
+.node .home-badge{position:absolute;bottom:-8px;left:-8px;width:19px;height:19px;border-radius:50%;background:#d8a12a;color:#fff;
+  font-size:11px;line-height:1;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 2px rgba(40,30,15,.3);border:1.5px solid var(--panel)}
 .node.ghost{opacity:.6;border-style:dashed;background:#faf7f0}
 .node.nocolor{border-left-width:1px}
 /* whole-card colour (tinted background + full coloured border) */
@@ -751,13 +760,13 @@ function createStore(data, onChange) {
     const name = (first + " " + last).trim();
     return name || "Unnamed";
   }
+  /* Full name for display. The maiden name is deliberately NOT appended here —
+     it lives only in the person's edit form, never in lists, cards or pickers. */
   function fullName(p) {
     if (typeof p === "string") p = person(p);
     if (!p) return "Unknown";
-    let n = (p.firstName || "").trim();
-    if (p.maidenName && p.maidenName !== p.lastName) n += (n ? " " : "") + p.lastName + " (né(e) " + p.maidenName + ")";
-    else n += (n ? " " : "") + (p.lastName || "");
-    return n.trim() || "Unnamed";
+    const n = ((p.firstName || "").trim() + " " + (p.lastName || p.maidenName || "").trim()).trim();
+    return n || "Unnamed";
   }
 
   // ---- Parent / child / sibling ------------------------------------------
@@ -1326,14 +1335,17 @@ document.getElementById("treeNameInput").addEventListener("change", (e) => {
 // Add a person, then focus + open the edit panel so the user can fill them in.
 document.getElementById("btnAddPerson").addEventListener("click", () => {
   if (!state.store) return;
+  const wasEmpty = state.store.people().length === 0;
   state.pendingLabel = "Add person";
   const p = state.store.addPerson({ firstName: "", lastName: "" });
-  state.selectedId = p.id; state.focusId = p.id;
-  if (state.currentView === "list" || state.currentView === "timeline") state.currentView = "family";
-  V.cam.family = null;
+  state.selectedId = p.id;
+  // Only re-centre the tree on the newcomer if there was nothing to look at before —
+  // otherwise the view stays where you are.
+  if (wasEmpty) { state.focusId = p.id; V.cam.family = null; if (state.currentView === "list" || state.currentView === "timeline") state.currentView = "family"; }
   render();
   openPanel(p.id);
   const first = document.querySelector("#sidePanel .field input"); if (first) first.focus();
+  if (!wasEmpty) toast("Person added — link them in with “＋ Add …” below, or use the ＋ on a card.", "", 5000);
 });
 document.getElementById("btnImportGed").addEventListener("click", () => document.getElementById("fileGed").click());
 
@@ -1833,6 +1845,27 @@ const GAP_X = 26, COUPLE_GAP = 16;
 const CARD_SIZES = { compact: { w: 168, h: 50, rh: 100 }, normal: { w: 200, h: 64, rh: 118 }, large: { w: 246, h: 84, rh: 148 } };
 V.cam = { family: null, pedigree: null };   // {s,x,y} camera per canvas view
 
+/* The "home" person — who *you* are in this tree. Stored in settings.homePersonId. */
+function homePersonId() {
+  const id = state.data && state.data.settings && state.data.settings.homePersonId;
+  return (id && state.store && state.store.person(id)) ? id : null;
+}
+function setHomePerson(id) {
+  state.data.settings.homePersonId = id || null;
+  state.pendingLabel = "Set “me”";
+  markDirty(); render();
+  if (V.panelId) renderPanel();
+}
+FT.setHomePerson = setHomePerson;
+async function chooseHomePerson() {
+  const id = await pickPerson({ title: "Which one is you?", allowCreate: false });
+  if (!id) return;
+  setHomePerson(id);
+  V.focusOn(id);
+  toast(`${S().displayName(id)} is now marked as you.`, "ok");
+}
+FT.chooseHomePerson = chooseHomePerson;
+
 /* Card display preferences, persisted in settings.cardDisplay. */
 function cardDisplay() {
   const d = (state.data.settings.cardDisplay = state.data.settings.cardDisplay || {});
@@ -1894,14 +1927,14 @@ function nodeEl(p, { sel, focus, add } = {}) {
   const cd = cardDisplay();
   const sx = p.sex === "M" ? "male" : p.sex === "F" ? "female" : "unknown";
   const colorCls = cd.sexColor === "none" ? "nocolor" : cd.sexColor === "full" ? (sx + " fill") : sx;
+  const isHome = p.id === homePersonId();
   const el = document.createElement("div");
   el.className = "node sz-" + cd.size + " " + colorCls
     + (sel ? " sel" : "") + (focus ? " focus" : "") + (p.death ? " deceased" : "")
-    + (cd.showPhoto ? "" : " nophoto");
+    + (isHome ? " home" : "") + (cd.showPhoto ? "" : " nophoto");
   el.dataset.id = p.id;
   el.style.width = CARD_W + "px";
-  let name = U.escapeHtml(S().displayName(p));
-  if (cd.showMaiden && p.maidenName && p.maidenName !== p.lastName) name += ` <span class="maiden">(née ${U.escapeHtml(p.maidenName)})</span>`;
+  const name = U.escapeHtml(S().displayName(p));
   const l1 = cardField(p, cd.line1), l2 = cardField(p, cd.line2);
   const av = cd.showPhoto ? `<div class="av" data-person="${p.id}">${U.escapeHtml(personInitials(p))}</div>` : "";
   el.innerHTML = av +
@@ -1910,7 +1943,9 @@ function nodeEl(p, { sel, focus, add } = {}) {
     `${l2 ? `<div class="dt dt2">${U.escapeHtml(l2)}</div>` : ""}` +
     `</div>` +
     (p.death ? `<span class="dead-badge" title="Deceased">†</span>` : "") +
-    (add ? `<button class="node-add" title="Add a relative">＋</button>` : "");
+    (isHome ? `<span class="home-badge" title="This is you">★</span>` : "") +
+    (add ? `<button class="node-fam" title="Show this person’s immediate family">👪</button>` +
+           `<button class="node-add" title="Add a relative">＋</button>` : "");
   return el;
 }
 
@@ -1927,7 +1962,7 @@ function ensureViewRoot() {
   }
   return vr;
 }
-V.getFocus = () => state.focusId || state.selectedId || (state.data.people[0] && state.data.people[0].id) || null;
+V.getFocus = () => state.focusId || homePersonId() || state.selectedId || (state.data.people[0] && state.data.people[0].id) || null;
 
 render = function render() {                    // override the Stage-1 stub
   if (!state.store) return;
@@ -1941,6 +1976,7 @@ render = function render() {                    // override the Stage-1 stub
   vr.style.display = showEmpty ? "none" : "block";     // don't let the empty viewRoot swallow clicks
   if (empty) { const dev = document.getElementById("devStats"); if (dev) dev.innerHTML = ""; }
   vr.innerHTML = "";
+  V.activeCanvas = null;                               // set again by the canvas views below
   if (view === "family") V.renderFamily(vr);
   else if (view === "pedigree") V.renderPedigree(vr);
   else if (view === "list") V.renderList(vr);
@@ -2203,6 +2239,12 @@ function addCanvasControls(vr, view) {
   const cardsBtn = document.createElement("button"); cardsBtn.className = "btn"; cardsBtn.textContent = "🎴 Cards"; cardsBtn.title = "Customise how cards look";
   cardsBtn.addEventListener("click", openCardSettings);
   tl.appendChild(cardsBtn);
+  const meBtn = document.createElement("button"); meBtn.className = "btn";
+  const home = homePersonId();
+  meBtn.textContent = home ? "🏠 Me" : "🏠 Set “me”";
+  meBtn.title = home ? "Centre the tree on you" : "Choose which person in this tree is you";
+  meBtn.addEventListener("click", () => home ? V.focusOn(home) : chooseHomePerson());
+  tl.appendChild(meBtn);
   vr.appendChild(tl);
 
   const br = document.createElement("div"); br.className = "controls br";
@@ -2261,13 +2303,20 @@ function zoomAround(view, canvas, f, pivot) {
   cam.s = s2;
   V.cam[view] = cam; applyCamTransform(canvas, cam);
 }
+/* Canvas interactions are bound ONCE to #viewRoot (which is reused across renders);
+   the live canvas + view are read from V.activeCanvas / V.activeView each time.
+   Binding per-render would stack duplicate listeners and make zoom/pan jitter. */
 function attachCanvasInteractions(vr, canvas, view) {
+  V.activeCanvas = canvas; V.activeView = view;
+  if (vr.__interactionsBound) return;
+  vr.__interactionsBound = true;
   const stage = document.getElementById("stage");
   // Cards are fixed: pressing anywhere (empty space OR a card) pans the canvas.
   // A press-and-release without movement selects the card, or opens the "+" add menu.
-  let panning = false, startX = 0, startY = 0, cam0 = null, downNodeId = null, downAddId = null, moved = false;
+  let panning = false, startX = 0, startY = 0, cam0 = null, downNodeId = null, downAddId = null, downFamId = null, moved = false;
   const THRESH = 4;
   vr.addEventListener("pointerdown", (e) => {
+    const canvas = V.activeCanvas, view = V.activeView; if (!canvas) return;
     if (e.button !== 0) return;
     if (e.target.closest(".controls") || e.target.closest(".upcoming")) return;   // let overlay controls handle their own clicks
     const nodeHit = e.target.closest(".node");
@@ -2275,26 +2324,32 @@ function attachCanvasInteractions(vr, canvas, view) {
     const cam = V.cam[view] || { s: 1, x: 0, y: 0 };
     startX = e.clientX; startY = e.clientY; cam0 = { ...cam }; moved = false; panning = true;
     downAddId = (inCanvas && e.target.closest(".node-add")) ? nodeHit.dataset.id : null;
+    downFamId = (inCanvas && e.target.closest(".node-fam")) ? nodeHit.dataset.id : null;
     downNodeId = inCanvas ? nodeHit.dataset.id : null;
     vr.setPointerCapture(e.pointerId);
   });
   vr.addEventListener("pointermove", (e) => {
     if (!panning) return;
+    const canvas = V.activeCanvas, view = V.activeView; if (!canvas) return;
     const dx = e.clientX - startX, dy = e.clientY - startY;
     if (Math.abs(dx) + Math.abs(dy) > THRESH) moved = true;
-    const cam = V.cam[view]; cam.x = cam0.x + dx; cam.y = cam0.y + dy; applyCamTransform(canvas, cam);
+    const cam = V.cam[view]; if (!cam) return;
+    cam.x = cam0.x + dx; cam.y = cam0.y + dy; applyCamTransform(canvas, cam);
   });
-  vr.addEventListener("pointerup", (e) => {
+  vr.addEventListener("pointerup", () => {
     if (!panning) return;
+    const canvas = V.activeCanvas, view = V.activeView;
     if (!moved && downAddId) {
-      const badge = canvas.querySelector(`.node[data-id="${CSS.escape(downAddId)}"] .node-add`);
+      const badge = canvas && canvas.querySelector(`.node[data-id="${CSS.escape(downAddId)}"] .node-add`);
       openAddRelativeMenu(downAddId, badge);              // "+" button = add a relative
-    } else if (!moved && downNodeId) onNodeClick(downNodeId, view);   // card body = open details
-    panning = false; downNodeId = null; downAddId = null;
+    } else if (!moved && downFamId) openFamilyGroup(downFamId);        // 👪 button = immediate family
+    else if (!moved && downNodeId) onNodeClick(downNodeId, view);      // card body = open details
+    panning = false; downNodeId = null; downAddId = null; downFamId = null;
   });
   vr.addEventListener("wheel", (e) => {
+    const canvas = V.activeCanvas, view = V.activeView; if (!canvas) return;
     e.preventDefault();
-    zoomAround(view, canvas, e.deltaY < 0 ? 1.15 : 1 / 1.15, null);   // centred on the selected person
+    zoomAround(view, canvas, e.deltaY < 0 ? 1.12 : 1 / 1.12, null);   // centred on the selected person
   }, { passive: false });
 }
 function onNodeClick(id, view) {
@@ -2584,9 +2639,14 @@ function renderPanel() {
   panel.appendChild(sb);
 
   const sf = document.createElement("div"); sf.className = "sf";
+  const isMe = p.id === homePersonId();
+  const me = document.createElement("button"); me.className = "btn sm" + (isMe ? " primary" : "");
+  me.textContent = isMe ? "★ This is you" : "☆ This is me";
+  me.title = isMe ? "Click to unset" : "Mark this person as you — the tree centres on them";
+  me.onclick = () => { setHomePerson(isMe ? null : p.id); toast(isMe ? "No longer marked as you." : `${store.displayName(p)} is now marked as you.`, "ok", 2500); };
   const rel = document.createElement("button"); rel.className = "btn sm"; rel.textContent = "🔗 Relationship to…"; rel.onclick = () => openRelationshipFinder(p.id);
   const del = document.createElement("button"); del.className = "btn sm danger"; del.textContent = "Delete"; del.onclick = () => deletePersonFlow(p.id);
-  sf.appendChild(rel); sf.appendChild(del);
+  sf.appendChild(me); sf.appendChild(rel); sf.appendChild(del);
   panel.appendChild(sf);
 
   hydrateAvatars(panel);
@@ -2613,36 +2673,57 @@ const REL_TYPES = {
   daughter:{ kind: "child", sex: "F", title: "Add a daughter" },
   partner: { kind: "spouse", sex: null, title: "Add a spouse / partner" }
 };
+const OPPOSITE_SEX = { M: "F", F: "M" };
 /* Add a relative of a specific type. Asks new-vs-existing; a new person gets the
    right sex preset. Everything is linked synchronously so it's one history step. */
 async function addRelative(personId, relType) {
   const store = S(); const cfg = REL_TYPES[relType]; if (!cfg) return;
+  const anchor = store.person(personId); if (!anchor) return;
   const exclude = new Set([personId]);
   if (cfg.kind === "parent") store.parents(personId).forEach(x => exclude.add(x.id));
+  if (cfg.kind === "spouse") store.partners(personId).forEach(x => exclude.add(x.person.id));
   const choice = await chooseOrCreatePerson({ title: cfg.title, exclude });
   if (!choice) return;
   state.pendingLabel = "Add " + relType;
+  // A partner has no fixed sex — default to the opposite of this person's.
+  const presetSex = cfg.sex || (cfg.kind === "spouse" ? (OPPOSITE_SEX[anchor.sex] || null) : null);
   let chosen;
   if (choice.id) chosen = choice.id;
-  else { const fields = choice.create || {}; if (cfg.sex) fields.sex = cfg.sex; chosen = store.addPerson(fields).id; }
+  else { const fields = choice.create || {}; if (presetSex) fields.sex = presetSex; chosen = store.addPerson(fields).id; }
   linkRelative(personId, chosen, cfg.kind);
+  if (!state.focusId) state.focusId = homePersonId() || personId;   // never let a new person steal the focus
   renderPanel(); render();
 }
 function linkRelative(personId, chosen, kind) {
   const store = S();
-  if (kind === "parent") { const r = store.addParent(personId, chosen); if (!r.ok && !r.already) toast(r.reason, "err"); }
-  else if (kind === "child") {
+  if (kind === "parent") {
+    const r = store.addParent(personId, chosen); if (!r.ok && !r.already) { toast(r.reason, "err"); return; }
+    // A second parent is the co-parent of this person's *full* siblings too, if they
+    // already share the other parent — keeps a couple's children together.
+    const other = store.person(personId).parentIds.filter(id => id !== chosen);
+    if (other.length === 1) {
+      for (const sib of store.children(other[0])) {
+        if (sib.id !== personId && sib.parentIds.length === 1) store.addParent(sib.id, chosen);
+      }
+    }
+  } else if (kind === "child") {
     const r = store.addParent(chosen, personId); if (!r.ok && !r.already) { toast(r.reason, "err"); return; }
     const parts = store.partners(personId);
     if (parts.length === 1) store.addParent(chosen, parts[0].person.id);   // auto-link the co-parent
-  } else if (kind === "spouse") { store.addMarriage(personId, chosen, {}); }
-  else if (kind === "sibling") {
+  } else if (kind === "spouse") {
+    store.addMarriage(personId, chosen, {});
+    // Children who so far have only this one parent are almost always the couple's.
+    const solo = store.soleChildren(personId);
+    for (const c of solo) store.addParent(c.id, chosen);
+    if (solo.length) toast(`Also linked ${solo.length} child${solo.length > 1 ? "ren" : ""} to ${store.displayName(chosen)}.`, "ok", 4200);
+  } else if (kind === "sibling") {
     let parentIds = (store.person(personId).parentIds || []).slice();
-    if (!parentIds.length) { const ph = store.addPerson({}); store.addParent(personId, ph.id); parentIds = [ph.id]; }  // shared (placeholder) parent connects siblings
+    if (!parentIds.length) { const ph = store.addPerson({ firstName: "Unknown" }); store.addParent(personId, ph.id); parentIds = [ph.id]; }  // shared parent is what makes them siblings
     for (const pid of parentIds) store.addParent(chosen, pid);
   }
 }
 FT.addRelative = addRelative;
+FT.linkRelative = linkRelative;
 
 /* Ask first: create a brand-new person, or link an existing one.
    Returns { id } (existing), { create: {firstName,lastName} } (new), or null. */
