@@ -41,6 +41,7 @@ GEDCOM files contain **links** to MyHeritage's photos, not the images themselves
 ## Browser support
 - **Chrome / Edge (desktop):** full support — Save writes directly to your folder.
 - **Other browsers (Firefox/Safari):** the app still works, but Load/Save fall back to file **download/upload** of `tree-data.json`, and added photos are embedded in that file instead of the `photos/` folder.
+- **Screen sizes:** the layout is responsive — on narrow screens/phones the toolbar wraps, the search bar drops to its own row, long buttons become icons, and the tree re-fits when you rotate or resize. (Direct-to-folder saving still needs desktop Chrome/Edge.)
 
 ## Data format
 `tree-data.json` is human-readable JSON: `people`, `marriages`, `photos`, `layout`, and `settings`. Dates keep both what you typed and a parsed form, so nothing is lost.

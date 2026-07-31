@@ -80,7 +80,7 @@ a{color:var(--accent)}
 .start-card h1{font-size:30px;letter-spacing:.2px}
 .start-card p.tag{color:var(--ink-soft);margin:10px 0 26px;font-size:15px}
 .start-actions{display:flex;gap:14px;flex-direction:column}
-.start-actions .btn{justify-content:center;padding:14px;font-size:15px}
+.start-actions .btn{justify-content:center;padding:14px;font-size:15px;white-space:normal;text-align:center}
 .start-actions .btn .sub{font-weight:400;opacity:.8;font-size:12.5px}
 .start-actions .big{flex-direction:column;gap:3px;align-items:center}
 .start-note{margin-top:22px;font-size:12.5px;color:var(--ink-soft);line-height:1.5}
@@ -91,7 +91,10 @@ a{color:var(--accent)}
 .recent .r:hover{border-color:var(--accent-soft)}
 
 /* ==== SECTION: App chrome / top bar ========================================= */
-#app{display:none;height:100vh;grid-template-rows:auto auto 1fr;overflow:hidden}
+/* minmax(0,1fr) stops the grid column from expanding to the topbar's min-content
+   width, which would otherwise make the whole app wider than the viewport. */
+#app{display:none;height:100vh;height:100dvh;grid-template-rows:auto auto 1fr;grid-template-columns:minmax(0,1fr);overflow:hidden;max-width:100vw}
+.topbar,.viewbar,.stage{min-width:0}
 .topbar{
   display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(--panel);
   border-bottom:1px solid var(--line);box-shadow:0 1px 0 rgba(0,0,0,.02);z-index:20;
@@ -428,6 +431,46 @@ a{color:var(--accent)}
 .tagger .side2{flex:1 1 220px;min-width:200px}
 .tagger .tagchip{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px}
 .tagger .tagchip .rn{flex:1;font-size:13px}
+
+/* ==== SECTION: Responsive =================================================== */
+.topbar .tree-name{flex:0 1 auto;min-width:0;text-overflow:ellipsis;overflow:hidden;white-space:nowrap}
+@media (max-width:900px){ .search-wrap input{width:160px} }
+@media (max-width:680px){
+  .topbar{flex-wrap:wrap;gap:6px 7px;padding:7px 9px}
+  .topbar .brand{font-size:16px}
+  .topbar .brand span{display:none}                 /* keep just the 🌳 */
+  .topbar .spacer{display:none}                      /* pack tightly and wrap instead */
+  .topbar .tree-name{max-width:120px}
+  .save-state{padding:5px 8px}
+  .save-state .ss-text{display:none}                 /* status becomes just the icon */
+  .tb-div{display:none}
+  #btnImportGed{font-size:0;padding:6px 9px} #btnImportGed::before{content:"📥";font-size:14px}
+  #btnAddPerson{font-size:0;padding:6px 9px} #btnAddPerson::before{content:"＋";font-size:15px}
+  .viewbar{flex-wrap:wrap;gap:5px 6px;padding:6px 8px}
+  .viewbar .spacer{display:none}
+  .tab{padding:6px 11px}
+  .search-wrap{flex:1 1 100%;order:5;margin-top:2px}
+  .search-wrap input{width:100%}
+  .controls.tl{top:8px;left:8px;flex-wrap:wrap;gap:6px;max-width:calc(100vw - 16px)}
+  .controls.br{bottom:12px;right:10px}
+  .side{width:min(400px,100vw)}
+  .upcoming{max-width:min(250px,calc(100vw - 24px))}
+  .menu-pop{max-width:calc(100vw - 20px)}
+  .modal header h2{font-size:17px}
+  /* list view: tighter cells, wrapping header, drop the widest column */
+  .listview{padding:10px 8px}
+  .listview th,.listview td{padding:8px 8px}
+  .listhead{flex-wrap:wrap;gap:8px}
+  .listview th:nth-child(5),.listview td:nth-child(5){display:none}   /* hide "Family" */
+  .timeline{padding:16px 12px}
+}
+@media (max-width:440px){
+  .listview th:nth-child(4),.listview td:nth-child(4){display:none}   /* also hide "Occupation" */
+}
+@media (max-width:400px){
+  .tab{padding:6px 8px;font-size:13px}
+  .topbar .tree-name{max-width:80px}
+}
 @media print{
   body *{visibility:hidden}
   #printArea,#printArea *{visibility:visible}
@@ -3106,49 +3149,105 @@ function ancestorsWithDist(id) {
   return map;
 }
 function ordinal(n) { const s = ["th", "st", "nd", "rd"], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
-function greats(n) { return n <= 0 ? "" : n === 1 ? "great-" : "great-".repeat(n); }
-function kinshipTerm(u, d, sexB) {
+function greats(n) { return n > 0 ? "great-".repeat(n) : ""; }
+const REMOVED_WORDS = ["", "once", "twice", "three times", "four times", "five times"];
+function removedWord(n) { return REMOVED_WORDS[n] || n + " times"; }
+
+/* Kinship term for B as seen from A, where the pair's closest common ancestor is
+   `u` generations above A and `d` generations above B. Always worded with B's sex.
+     u=1,d=0 father        u=2,d=0 grandfather     u=3,d=0 great-grandfather
+     u=1,d=1 brother       u=2,d=1 uncle           u=3,d=1 great-uncle
+     u=1,d=2 nephew        u=1,d=3 great-nephew
+     u=2,d=2 1st cousin    u=3,d=2 1st cousin once removed                    */
+function kinshipTerm(u, d, sexB, opts = {}) {
   const M = sexB === "M", F = sexB === "F";
-  const parent = M ? "father" : F ? "mother" : "parent";
-  const child = M ? "son" : F ? "daughter" : "child";
-  const sib = M ? "brother" : F ? "sister" : "sibling";
-  const pibling = M ? "uncle" : F ? "aunt" : "aunt/uncle";
-  const nibling = M ? "nephew" : F ? "niece" : "niece/nephew";
+  const parent  = M ? "father"  : F ? "mother"   : "parent";
+  const child   = M ? "son"     : F ? "daughter" : "child";
+  const sib     = M ? "brother" : F ? "sister"   : "sibling";
+  const pibling = M ? "uncle"   : F ? "aunt"     : "aunt/uncle";
+  const nibling = M ? "nephew"  : F ? "niece"    : "niece/nephew";
   if (u === 0 && d === 0) return "the same person";
-  if (u === 0) return d === 1 ? child : d === 2 ? "grand" + child : greats(d - 2) + "grand" + child;
-  if (d === 0) return u === 1 ? parent : u === 2 ? "grand" + parent : greats(u - 2) + "grand" + parent;
-  if (u === 1 && d === 1) return sib;
-  if (d === 1) return (u === 2 ? "" : u === 3 ? "grand-" : greats(u - 3) + "grand-") + pibling;   // B is sibling of A's ancestor
-  if (u === 1) return (d === 2 ? "" : d === 3 ? "grand-" : greats(d - 3) + "grand-") + nibling;
+  if (u === 0) return d === 1 ? child  : greats(d - 2) + "grand" + child;    // son → grandson → great-grandson
+  if (d === 0) return u === 1 ? parent : greats(u - 2) + "grand" + parent;   // father → grandfather → great-grandfather
+  if (u === 1 && d === 1) return (opts.half ? "half-" : "") + sib;
+  if (d === 1) return greats(u - 2) + pibling;                               // uncle → great-uncle → great-great-uncle
+  if (u === 1) return greats(d - 2) + nibling;                               // nephew → great-nephew
   const cousin = Math.min(u, d) - 1, removed = Math.abs(u - d);
-  return ordinal(cousin) + " cousin" + (removed ? ` ${removed} time${removed > 1 ? "s" : ""} removed` : "");
+  return ordinal(cousin) + " cousin" + (removed ? " " + removedWord(removed) + " removed" : "");
 }
+
+/* Closest common ancestor between two people → {u, d, anc} or null. */
+function bloodDist(xId, yId) {
+  const X = ancestorsWithDist(xId), Y = ancestorsWithDist(yId);
+  let best = null;
+  for (const [anc, du] of X) if (Y.has(anc)) { const dd = Y.get(anc), tot = du + dd; if (!best || tot < best.tot) best = { u: du, d: dd, tot, anc }; }
+  return best;
+}
+/* Half sibling = both parents known for each, but only one is shared. If either
+   person's second parent is simply unrecorded we say plain "brother/sister"
+   rather than claiming a half relationship we can't actually know. */
+function siblingIsHalf(aId, bId) {
+  const store = S();
+  const ap = (store.person(aId).parentIds || []), bp = (store.person(bId).parentIds || []);
+  if (ap.length < 2 || bp.length < 2) return false;
+  return bp.filter(x => ap.includes(x)).length === 1;
+}
+
 function describeRelationship(aId, bId) {
   const store = S();
   if (aId === bId) return { summary: "the same person", term: null };
-  // direct spouse?
-  if (store.marriagesOf(aId).some(m => m.spouseIds.includes(bId))) {
-    const b = store.person(bId); return { summary: (b.sex === "M" ? "husband" : b.sex === "F" ? "wife" : "spouse"), term: "spouse" };
+  const b = store.person(bId); if (!b) return { summary: null, term: "path" };
+  const sexB = b.sex;
+  const M = sexB === "M", F = sexB === "F";
+
+  // 1. Married to each other.
+  const direct = store.marriagesOf(aId).find(m => m.spouseIds.includes(bId));
+  if (direct) {
+    const w = M ? "husband" : F ? "wife" : "spouse";
+    return { summary: direct.divorced ? "ex-" + w : w, term: "spouse" };
   }
-  const A = ancestorsWithDist(aId), B = ancestorsWithDist(bId);
+
+  // 2. Blood relatives.
+  const blood = bloodDist(aId, bId);
+  if (blood) {
+    const half = blood.u === 1 && blood.d === 1 && siblingIsHalf(aId, bId);
+    return { summary: kinshipTerm(blood.u, blood.d, sexB, { half }), term: "blood", via: blood.anc, u: blood.u, d: blood.d };
+  }
+
+  // 3. B married a blood relative of A  (aunt by marriage, sister-in-law, step-parent…).
+  //    Worded with B's sex, but positioned by where their spouse sits in A's tree.
   let best = null;
-  for (const [anc, da] of A) if (B.has(anc)) { const db = B.get(anc); const tot = da + db; if (!best || tot < best.tot) best = { anc, u: da, d: db, tot }; }
-  if (best) return { summary: kinshipTerm(best.u, best.d, store.person(bId).sex), term: "blood", via: best.anc, u: best.u, d: best.d };
-  // marriage-based: B is spouse of a blood relative of A?
   for (const s of store.spouses(bId)) {
-    const r = describeBlood(aId, s.person.id);
-    if (r) return { summary: r + "-in-law (via marriage)", term: "inlaw" };
+    const r = bloodDist(aId, s.person.id);
+    if (r && (!best || r.tot < best.tot)) best = r;
   }
+  if (best) {
+    const { u, d } = best;
+    let term;
+    if (u === 1 && d === 0) term = M ? "stepfather" : F ? "stepmother" : "step-parent";
+    else if (d === 0) term = "step-" + kinshipTerm(u, d, sexB);                 // step-grandmother…
+    else if (u === 1 && d === 1) term = kinshipTerm(u, d, sexB) + "-in-law";    // brother/sister-in-law
+    else if (u === 0 && d === 1) term = kinshipTerm(u, d, sexB) + "-in-law";    // son/daughter-in-law
+    else term = kinshipTerm(u, d, sexB) + " by marriage";                       // aunt/great-aunt/cousin by marriage
+    return { summary: term, term: "inlaw" };
+  }
+
+  // 4. B is a blood relative of A's spouse (mother-in-law, sister-in-law, stepchild…).
+  let best2 = null;
   for (const s of store.spouses(aId)) {
-    const r2 = describeBlood(s.person.id, bId);
-    if (r2) return { summary: r2 + "-in-law (via marriage)", term: "inlaw" };
+    const r = bloodDist(s.person.id, bId);
+    if (r && (!best2 || r.tot < best2.tot)) best2 = r;
   }
+  if (best2) {
+    const { u, d } = best2;
+    let term;
+    if (u === 0 && d === 1) term = M ? "stepson" : F ? "stepdaughter" : "stepchild";
+    else if (d === 0 || (u === 1 && d === 1)) term = kinshipTerm(u, d, sexB) + "-in-law";  // parent/grandparent/sibling-in-law
+    else term = kinshipTerm(u, d, sexB) + " by marriage";
+    return { summary: term, term: "inlaw" };
+  }
+
   return { summary: null, term: "path" };
-  function describeBlood(x, y) {
-    const AX = ancestorsWithDist(x), BY = ancestorsWithDist(y); let b = null;
-    for (const [anc, da] of AX) if (BY.has(anc)) { const db = BY.get(anc); if (!b || da + db < b.tot) b = { u: da, d: db, tot: da + db }; }
-    return b ? kinshipTerm(b.u, b.d, store.person(y).sex) : null;
-  }
 }
 FT.describeRelationship = describeRelationship;
 async function openRelationshipFinder(presetA) {
@@ -3490,6 +3589,17 @@ V.init = function () {
     else if ((k === "y") || (k === "z" && e.shiftKey)) { if (editable && k === "y") return; e.preventDefault(); History.redo(); }
   });
   wireSearch();
+  // Re-fit the canvas when the window size or orientation changes meaningfully.
+  let _lastW = window.innerWidth, _rt = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(_rt);
+    _rt = setTimeout(() => {
+      if (!state.data) return;
+      if (Math.abs(window.innerWidth - _lastW) >= 40) { V.cam = { family: null, pedigree: null }; }  // width change → re-fit
+      _lastW = window.innerWidth;
+      render();
+    }, 220);
+  });
   // Drag an image file onto the open person panel to attach it as a photo.
   const sp = document.getElementById("sidePanel");
   sp.addEventListener("dragover", (e) => { if (V.panelId && e.dataTransfer && [...e.dataTransfer.items].some(i => i.kind === "file")) { e.preventDefault(); sp.classList.add("dropping"); } });
