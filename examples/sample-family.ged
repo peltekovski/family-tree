@@ -1,0 +1,335 @@
+0 HEAD
+1 SOUR FAMILY_TREE_SINGLE_FILE
+2 NAME Family Tree (single-file app)
+1 DATE 26 SEP 2026
+1 SUBM @SUBM1@
+1 FILE Petrov Family (sample).ged
+1 GEDC
+2 VERS 5.5.1
+2 FORM LINEAGE-LINKED
+1 CHAR UTF-8
+0 @SUBM1@ SUBM
+1 NAME Family Tree user
+0 @I1@ INDI
+1 NAME Ivan /Petrov/
+2 GIVN Ivan
+2 SURN Petrov
+1 SEX M
+1 BIRT
+2 DATE ABT 1880
+2 PLAC Ohrid
+1 DEAT
+2 DATE 1951
+2 PLAC Ohrid
+1 OCCU Fisherman
+1 FAMS @F1@
+0 @I2@ INDI
+1 NAME Maria /Petrova/
+2 GIVN Maria
+2 SURN Petrova
+1 SEX F
+1 BIRT
+2 DATE 1884
+2 PLAC Struga
+1 DEAT
+2 DATE 1960
+2 PLAC Ohrid
+1 FAMS @F1@
+0 @I3@ INDI
+1 NAME Stojan /Petrov/
+2 GIVN Stojan
+2 SURN Petrov
+1 SEX M
+1 BIRT
+2 DATE 14 FEB 1910
+2 PLAC Ohrid
+1 DEAT
+2 DATE 2 NOV 1988
+2 PLAC Skopje
+1 OCCU Carpenter
+1 FAMS @F2@
+1 FAMC @F1@
+0 @I4@ INDI
+1 NAME Elena /Ilieva/
+2 GIVN Elena
+2 SURN Ilieva
+2 _MARNM Petrova
+1 SEX F
+1 BIRT
+2 DATE 22 JUL 1915
+2 PLAC Bitola
+1 DEAT
+2 DATE 2001
+2 PLAC Skopje
+1 FAMS @F2@
+0 @I5@ INDI
+1 NAME Vera /Petrova/
+2 GIVN Vera
+2 SURN Petrova
+2 _MARNM Nikolova
+1 SEX F
+1 BIRT
+2 DATE 1913
+2 PLAC Ohrid
+1 DEAT
+2 DATE 1990
+1 FAMS @F3@
+1 FAMC @F1@
+0 @I6@ INDI
+1 NAME Boris /Nikolov/
+2 GIVN Boris
+2 SURN Nikolov
+1 SEX M
+1 BIRT
+2 DATE 1909
+2 PLAC Prilep
+1 DEAT Y
+1 FAMS @F3@
+0 @I7@ INDI
+1 NAME Dragan /Nikolov/
+2 GIVN Dragan
+2 SURN Nikolov
+1 SEX M
+1 BIRT
+2 DATE 5 MAY 1938
+2 PLAC Prilep
+1 OCCU Engineer
+1 FAMS @F9@
+1 FAMC @F3@
+0 @I8@ INDI
+1 NAME Nada /Nikolova/
+2 GIVN Nada
+2 SURN Nikolova
+1 SEX F
+1 BIRT
+2 DATE 19 SEP 1966
+2 PLAC Skopje
+1 FAMC @F9@
+0 @I9@ INDI
+1 NAME Zivko /Petrov/
+2 GIVN Zivko
+2 SURN Petrov
+1 SEX M
+1 BIRT
+2 DATE 8 JAN 1945
+2 PLAC Skopje
+1 OCCU Teacher
+1 NOTE Taught mathematics for forty years.
+2 CONT Loved chess.
+1 FAMS @F4@
+1 FAMC @F2@
+0 @I10@ INDI
+1 NAME Ana /Stojanova/
+2 GIVN Ana
+2 SURN Stojanova
+2 _MARNM Petrova
+1 SEX F
+1 BIRT
+2 DATE 30 APR 1950
+2 PLAC Kumanovo
+1 FAMS @F4@
+1 FAMS @F11@
+0 @I11@ INDI
+1 NAME Vasko /Petrov/
+2 GIVN Vasko
+2 SURN Petrov
+1 SEX M
+1 BIRT
+2 DATE 11 DEC 1947
+2 PLAC Skopje
+1 OCCU Musician
+1 FAMS @F5@
+1 FAMC @F2@
+0 @I12@ INDI
+1 NAME Lidija /Todorova/
+2 GIVN Lidija
+2 SURN Todorova
+2 _MARNM Petrova
+1 SEX F
+1 BIRT
+2 DATE 1952
+2 PLAC Veles
+1 FAMS @F5@
+0 @I13@ INDI
+1 NAME Kiril /Petrov/
+2 GIVN Kiril
+2 SURN Petrov
+1 SEX M
+1 BIRT
+2 DATE 3 JUN 1976
+2 PLAC Skopje
+1 FAMS @F10@
+1 FAMC @F5@
+0 @I14@ INDI
+1 NAME Tea /Petrova/
+2 GIVN Tea
+2 SURN Petrova
+1 SEX F
+1 BIRT
+2 DATE 21 AUG 2004
+2 PLAC Skopje
+1 FAMC @F10@
+0 @I15@ INDI
+1 NAME Petar /Stefanov/
+2 GIVN Petar
+2 SURN Stefanov
+1 SEX M
+1 BIRT
+2 DATE 1948
+2 PLAC Kumanovo
+1 FAMS @F11@
+0 @I16@ INDI
+1 NAME Marko /Petrov/
+2 GIVN Marko
+2 SURN Petrov
+1 SEX M
+1 BIRT
+2 DATE 17 MAR 1978
+2 PLAC Skopje
+1 OCCU Software developer
+1 FAMS @F7@
+1 FAMC @F4@
+0 @I17@ INDI
+1 NAME Iva /Petrova/
+2 GIVN Iva
+2 SURN Petrova
+2 _MARNM Markovska
+1 SEX F
+1 BIRT
+2 DATE 9 NOV 1981
+2 PLAC Skopje
+1 FAMS @F8@
+1 FAMC @F4@
+0 @I18@ INDI
+1 NAME Goran /Stefanov/
+2 GIVN Goran
+2 SURN Stefanov
+1 SEX M
+1 BIRT
+2 DATE 12 OCT 1970
+2 PLAC Kumanovo
+1 FAMC @F11@
+0 @I19@ INDI
+1 NAME Nikola /Nikolovski/
+2 GIVN Nikola
+2 SURN Nikolovski
+1 SEX M
+1 BIRT
+2 DATE 1952
+2 PLAC Bitola
+1 FAMS @F6@
+0 @I20@ INDI
+1 NAME Olga /Ristova/
+2 GIVN Olga
+2 SURN Ristova
+2 _MARNM Nikolovska
+1 SEX F
+1 BIRT
+2 DATE 1955
+2 PLAC Resen
+1 FAMS @F6@
+0 @I21@ INDI
+1 NAME Sara /Nikolovska/
+2 GIVN Sara
+2 SURN Nikolovska
+2 _MARNM Petrova
+1 SEX F
+1 BIRT
+2 DATE 25 DEC 1980
+2 PLAC Bitola
+1 FAMS @F7@
+1 FAMC @F6@
+0 @I22@ INDI
+1 NAME Luka /Petrov/
+2 GIVN Luka
+2 SURN Petrov
+1 SEX M
+1 BIRT
+2 DATE 6 JUL 2006
+2 PLAC Skopje
+1 FAMC @F7@
+0 @I23@ INDI
+1 NAME Toni /Markovski/
+2 GIVN Toni
+2 SURN Markovski
+1 SEX M
+1 BIRT
+2 DATE 1979
+2 PLAC Ohrid
+1 FAMS @F8@
+0 @I24@ INDI
+1 NAME Mila /Markovska/
+2 GIVN Mila
+2 SURN Markovska
+1 SEX F
+1 BIRT
+2 DATE 2 FEB 2008
+2 PLAC Ohrid
+1 FAMC @F8@
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 MARR
+2 DATE 1906
+2 PLAC Ohrid
+1 CHIL @I3@
+1 CHIL @I5@
+0 @F2@ FAM
+1 HUSB @I3@
+1 WIFE @I4@
+1 MARR
+2 DATE 5 SEP 1943
+2 PLAC Skopje
+1 CHIL @I9@
+1 CHIL @I11@
+0 @F3@ FAM
+1 HUSB @I6@
+1 WIFE @I5@
+1 MARR Y
+1 CHIL @I7@
+0 @F4@ FAM
+1 HUSB @I9@
+1 WIFE @I10@
+1 MARR
+2 DATE 20 JUN 1975
+2 PLAC Skopje
+1 CHIL @I16@
+1 CHIL @I17@
+0 @F5@ FAM
+1 HUSB @I11@
+1 WIFE @I12@
+1 MARR Y
+1 CHIL @I13@
+0 @F6@ FAM
+1 HUSB @I19@
+1 WIFE @I20@
+1 MARR Y
+1 CHIL @I21@
+0 @F7@ FAM
+1 HUSB @I16@
+1 WIFE @I21@
+1 MARR
+2 DATE 14 AUG 2004
+2 PLAC Bitola
+1 CHIL @I22@
+0 @F8@ FAM
+1 HUSB @I23@
+1 WIFE @I17@
+1 MARR
+2 DATE 1 JUL 2006
+2 PLAC Ohrid
+1 DIV
+2 DATE 2019
+1 CHIL @I24@
+0 @F9@ FAM
+1 HUSB @I7@
+1 CHIL @I8@
+0 @F10@ FAM
+1 HUSB @I13@
+1 CHIL @I14@
+0 @F11@ FAM
+1 HUSB @I15@
+1 WIFE @I10@
+1 _UNMARRIED Y
+1 CHIL @I18@
+0 TRLR

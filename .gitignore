@@ -1,0 +1,16 @@
+# Personal family data must never be committed.
+# (The app keeps your tree next to wherever you open it; if you use this repo
+#  folder as your tree folder, these rules keep your data out of git.)
+tree-data.json
+tree-data.backup.json
+photos/
+*.ged
+!examples/*.ged
+
+# Local tooling / OS noise
+.claude/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

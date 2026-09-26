@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Family Tree — benchmark</title>
+<style>
+  body{font:14px/1.5 system-ui,sans-serif;margin:20px;color:#222}
+  table{border-collapse:collapse;margin-top:10px}
+  td,th{border:1px solid #ccc;padding:4px 10px;text-align:right;font-variant-numeric:tabular-nums}
+  th{background:#f4f1ea}
+  #frames{position:absolute;left:-5000px;top:0}
+</style>
+</head>
+<body>
+<h1>Benchmark</h1>
+<p>Times (ms) for the operations users wait on, on deterministic synthetic trees.
+Median of 5 runs. Numbers vary by machine; compare runs on the same machine only.
+Add <code>?app=../other-copy.html</code> to benchmark another build (A/B).</p>
+<div id="status">running…</div>
+<table id="t"></table>
+<div id="frames"></div>
+<script>
+// Cache-bust the helpers (a stale harness.js would silently ignore ?app=).
+const load = (f) => new Promise((res, rej) => { const s = document.createElement("script"); s.src = `${f}?v=${Date.now()}`; s.onload = res; s.onerror = () => rej(new Error("could not load " + f)); document.head.appendChild(s); });
+(async () => {
+  await load("fixtures.js"); await load("harness.js");
+  document.getElementById("status").textContent = "running against " + APP_URL + "…";
+  const SIZES = [500, 2000, 5000];
+  const median = (a) => a.slice().sort((x, y) => x - y)[Math.floor(a.length / 2)];
+  const rows = [];
+  for (const N of SIZES) {
+    const app = await freshApp();
+    const FT = app.FT;
+    const t = syntheticTree(FT, N);
+    FT.openTree(t, {});
+    // Let the previous iframe's heap be collected first: measured without this
+    // pause, GC from the torn-down tree inflated later timings ~3×.
+    await tick(800);
+    FT.state.focusId = t.people[t.people.length - 1].id;
+    const time = (f, reps = 5) => { const xs = []; for (let i = 0; i < reps; i++) { const a = performance.now(); f(); xs.push(performance.now() - a); } return +median(xs).toFixed(1); };
+    const view = (v) => () => { FT.state.currentView = v; FT.render(); };
+    const ids = t.people.map(p => p.id);
+    rows.push({
+      people: t.people.length,
+      "render Family": time(view("family")),
+      "render Pedigree": time(view("pedigree")),
+      "render List": time(view("list")),
+      "render Timeline": time(view("timeline")),
+      "Data check": time(() => FT.validateTree(t), 3),
+      "serialize": time(() => FT.serializeTree(t)),
+      "50× relationship": time(() => { for (let i = 0; i < 50; i++) FT.describeRelationship(ids[(i * 37) % ids.length], ids[(i * 91 + 5) % ids.length]); }, 3),
+      "JSON KB": Math.round(FT.serializeTree(t).length / 1024)
+    });
+  }
+  const tb = document.getElementById("t");
+  const cols = Object.keys(rows[0]);
+  tb.innerHTML = "<tr>" + cols.map(c => `<th>${c}</th>`).join("") + "</tr>" +
+    rows.map(r => "<tr>" + cols.map(c => `<td>${r[c]}</td>`).join("") + "</tr>").join("");
+  document.getElementById("status").textContent = `done — app: ${APP_URL} — ${navigator.userAgent}`;
+  window.__bench = rows;
+})().catch(e => { document.getElementById("status").textContent = "ERROR: " + e.message; window.__bench = { error: e.message }; });
+</script>
+</body>
+</html>

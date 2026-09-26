@@ -1,0 +1,4 @@
+# Store text with LF in the repository regardless of the committer's OS.
+* text=auto eol=lf
+# GEDCOM files conventionally use CRLF; keep the sample byte-for-byte.
+*.ged -text

@@ -3,14 +3,23 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Privacy guarantee, enforced by the browser: this page can't talk to the
+     network or load anything from outside itself. Images may only come from
+     your own files (blob:) or data embedded in the tree (data:). -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; font-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; manifest-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8C%B3%3C/text%3E%3C/svg%3E">
 <title>Family Tree</title>
 <!--
-  Family Tree — a self-contained, single-file genealogy app.
-  No build step, no runtime dependencies. Everything (HTML/CSS/JS) lives in this file.
-  Data lives OUTSIDE the app in a chosen folder: tree-data.json + a photos/ folder.
+  Family Tree — a private, offline, single-file genealogy app.
+  MIT licensed. Source, tests and docs: see README.md next to this file.
 
-  Code is organized into clearly delimited sections (search for "==== SECTION").
-  Build order: Data model -> GEDCOM parser -> Save/Load -> Views/Interactivity.
+  No build step, no runtime dependencies, no network. Everything (HTML/CSS/JS)
+  lives in this one file so it keeps working for decades. Your data lives
+  OUTSIDE the app, in a folder you choose: tree-data.json + photos/.
+
+  Code is organized into delimited sections — search for "==== SECTION".
+  Tests: open tests/index.html over http (see tests/README.md).
 -->
 <style>
 /* ==== SECTION: Base styles ==================================================== */
@@ -114,6 +123,7 @@ a{color:var(--accent)}
 .save-state[data-status="saved"]{color:var(--ok);background:rgba(63,122,77,.09);border-color:rgba(63,122,77,.18)}
 .save-state[data-status="unsaved"]{color:#9a6510;background:rgba(201,138,26,.12);border-color:rgba(201,138,26,.28)}
 .save-state[data-status="saving"]{color:var(--accent);background:rgba(122,92,62,.09);border-color:rgba(122,92,62,.2)}
+.save-state[data-status="error"]{color:#fff;background:var(--danger);border-color:var(--danger)}
 .save-state:hover{filter:brightness(.97)}
 
 /* View tabs */
@@ -138,11 +148,6 @@ a{color:var(--accent)}
 .stage-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;color:var(--ink-soft);text-align:center;padding:30px}
 .stage-empty .big{font-size:46px}
 
-/* Generic small stat chip used in the placeholder / dev panel */
-.statgrid{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin-top:8px}
-.stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 18px;min-width:110px}
-.stat .n{font-size:26px;font-family:var(--serif);font-weight:600}
-.stat .l{font-size:12px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.06em}
 
 /* ==== SECTION: Toast / modal (shared chrome) ================================ */
 #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:80;display:flex;flex-direction:column;gap:8px;align-items:center}
@@ -179,6 +184,10 @@ a{color:var(--accent)}
   border-radius:12px;box-shadow:0 1px 3px rgba(40,30,15,.10);padding:10px 12px;cursor:pointer;
   display:flex;gap:10px;align-items:center;user-select:none;transition:box-shadow .12s,border-color .12s;border-left-width:4px}
 .node:hover{box-shadow:var(--shadow)}
+.node:focus{outline:none}
+.node:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+:focus-visible{outline-color:var(--accent)}
+#viewRoot.canvas-view{touch-action:none}   /* the canvas handles pan/pinch itself */
 .node.sel{box-shadow:0 0 0 3px rgba(122,92,62,.22),var(--shadow)}
 /* the person the tree is currently built around — unmistakable ring + lift */
 .node.focus{box-shadow:0 0 0 3px var(--accent),0 0 0 7px rgba(122,92,62,.18),0 6px 18px rgba(40,30,15,.22);z-index:3}
@@ -206,7 +215,6 @@ a{color:var(--accent)}
   font-size:12px;line-height:1;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 2px rgba(40,30,15,.3);border:1.5px solid var(--panel)}
 .node .home-badge{position:absolute;bottom:-8px;left:-8px;width:19px;height:19px;border-radius:50%;background:#d8a12a;color:#fff;
   font-size:11px;line-height:1;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 2px rgba(40,30,15,.3);border:1.5px solid var(--panel)}
-.node.ghost{opacity:.6;border-style:dashed;background:#faf7f0}
 .node.nocolor{border-left-width:1px}
 /* whole-card colour (tinted background + full coloured border) */
 .node.fill{border-left-width:1px}
@@ -215,7 +223,6 @@ a{color:var(--accent)}
 .node.fill.unknown{background:#f1eee9;border-color:#cabfad}
 .node.fill .av{background:rgba(255,255,255,.65)}
 .node.fill.sel{border-color:var(--accent)}
-.node .nm .maiden{font-weight:400;color:var(--ink-soft);font-size:.9em}
 .node .dt2{opacity:.85}
 /* card size variants */
 .node.sz-compact{padding:7px 10px}
@@ -235,7 +242,6 @@ a{color:var(--accent)}
 .controls .grp{display:flex;gap:6px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:5px 8px;box-shadow:var(--shadow)}
 .controls .grp label{font-size:12px;color:var(--ink-soft)}
 .controls select,.controls input[type=range]{accent-color:var(--accent)}
-.hint-chip{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:5px 12px;font-size:12px;color:var(--ink-soft);box-shadow:var(--shadow)}
 
 /* ==== SECTION: Side edit panel ============================================= */
 .side{position:absolute;top:0;right:0;height:100%;width:380px;max-width:92vw;background:var(--panel);
@@ -358,9 +364,6 @@ a{color:var(--accent)}
 .tl-year{flex:0 0 54px;font-weight:600;font-variant-numeric:tabular-nums}
 .tl-desc{flex:1}.tl-desc .who{cursor:pointer;font-weight:600}.tl-desc .who:hover{color:var(--accent)}
 .tl-kind{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft)}
-
-/* Family group strip (shown under the canvas focus) */
-.fg-toggle{margin-left:6px}
 
 /* Relationship finder + reminders + validation lists reuse modal styles */
 .rel-path{display:flex;flex-direction:column;gap:2px}
@@ -550,10 +553,9 @@ a{color:var(--accent)}
         <div style="margin-top:6px">Add your first person, or import a GEDCOM file from MyHeritage.</div>
       </div>
       <div style="display:flex;gap:10px">
-        <button class="btn primary" onclick="document.getElementById('btnAddPerson').click()">+ Add a person</button>
-        <button class="btn" onclick="document.getElementById('btnImportGed').click()">Import GEDCOM</button>
+        <button class="btn primary" id="btnEmptyAdd">+ Add a person</button>
+        <button class="btn" id="btnEmptyImport">Import GEDCOM</button>
       </div>
-      <div class="statgrid" id="devStats"></div>
     </div>
     <aside class="side" id="sidePanel"></aside>
     <aside class="history-panel" id="historyPanel">
@@ -582,6 +584,8 @@ a{color:var(--accent)}
    ============================================================================ */
 const FT = {};
 window.FT = FT;
+/* Semantic version of the app (shown in About). Bump on every release; see CHANGELOG.md. */
+const APP_VERSION = FT.version = "1.0.0";
 
 /* ==== SECTION: Utilities ==================================================== */
 const U = FT.util = (() => {
@@ -608,7 +612,6 @@ const U = FT.util = (() => {
   const MONTHS = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
   const MONTH_FULL = ["january","february","march","april","may","june","july","august","september","october","november","december"];
   const MONTH_DISP = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  const QUALIFIERS = ["ABT","EST","CAL","BEF","AFT","FROM","TO","BET","INT","AFT.","ABT."];
 
   function monthNum(tok) {
     if (!tok) return null;
@@ -647,6 +650,8 @@ const U = FT.util = (() => {
     else if ((m = s.match(/^([A-Z.]{3,})\s+(\d{3,4})$/)))  { month = monthNum(m[1]); year = +m[2]; }
     else if ((m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/))) { day = +m[1]; month = +m[2]; year = +m[3]; } // assume D/M/Y
     else if ((m = s.match(/^(\d{3,4})$/)))                 { year = +m[1]; }
+    else if ((m = s.match(/^(\d{1,2})\s+([A-Z.]{3,})$/)) && monthNum(m[2])) { day = +m[1]; month = monthNum(m[2]); }  // "3 JUN": birthday, year unknown
+    else if ((m = s.match(/^([A-Z.]{3,})$/)) && monthNum(m[1])) { month = monthNum(m[1]); }
     else { const y = s.match(/\b(\d{4})\b/); if (y) year = +y[1]; } // last resort: grab a 4-digit year
 
     if (month != null && (month < 1 || month > 12)) { month = null; day = null; }
@@ -667,15 +672,18 @@ const U = FT.util = (() => {
   }
 
   /** Human display for a GDate, e.g. "12 Jan 1980", "abt 1975". */
+  const QUAL_DISPLAY = { ABT: "abt ", EST: "est ", CAL: "calc ", BEF: "bef ", AFT: "aft ", BET: "bet ", FROM: "from ", INT: "" };
+  /** "12 Jan 1980" / "Jan 1980" / "12 Jan" / "1980" from structured parts, or "" if there are none. */
+  function coreDate(year, month, day) {
+    const y = year != null ? " " + year : "";
+    if (day && month) return (day + " " + MONTH_DISP[month - 1] + y).trim();
+    if (month) return (MONTH_DISP[month - 1] + y).trim();
+    return year != null ? String(year) : "";
+  }
   function formatDate(d) {
     if (!d) return "";
-    if (d.year == null) return d.original || "";
-    let core;
-    if (d.day && d.month) core = d.day + " " + MONTH_DISP[d.month - 1] + " " + d.year;
-    else if (d.month)     core = MONTH_DISP[d.month - 1] + " " + d.year;
-    else                  core = String(d.year);
-    const pre = { ABT: "abt ", EST: "est ", CAL: "calc ", BEF: "bef ", AFT: "aft ", BET: "bet ", FROM: "from ", INT: "" }[d.qualifier] || "";
-    return pre + core;
+    if (d.year == null && !d.month) return d.original || "";   // free text we couldn't structure: show as typed
+    return (QUAL_DISPLAY[d.qualifier] || "") + coreDate(d.year, d.month, d.day);
   }
 
   /** Year of a GDate or null. */
@@ -693,12 +701,8 @@ const U = FT.util = (() => {
     if (year == null && month == null && day == null) return null;
     let iso = null;
     if (year != null) { iso = pad(year, 4); if (month) { iso += "-" + pad(month); if (day) iso += "-" + pad(day); } }
-    let core;
-    if (day && month) core = day + " " + MONTH_DISP[month - 1] + (year != null ? " " + year : "");
-    else if (month) core = MONTH_DISP[month - 1] + (year != null ? " " + year : "");
-    else core = year != null ? String(year) : "";
-    const pre = { ABT: "abt ", EST: "est ", CAL: "calc ", BEF: "bef ", AFT: "aft ", BET: "bet ", FROM: "from ", INT: "" }[qualifier] || "";
-    return { original: (pre + core).trim(), year, month, day, qualifier, iso, approx: !!qualifier };
+    const original = ((QUAL_DISPLAY[qualifier] || "") + coreDate(year, month, day)).trim();
+    return { original, year, month, day, qualifier, iso, approx: !!qualifier };
   }
 
   return { uid, nowISO, deepClone, escapeHtml, parseDate, dateSortKey, formatDate, yearOf, monthNum,
@@ -746,6 +750,14 @@ FT.emptyTree = emptyTree;
 /* ==== SECTION: Data model — TreeStore =======================================
    createStore(data, onChange) returns an API bound to `data`. All mutating
    methods bump updatedAt and call onChange(). Derived queries never mutate.
+
+   Lookups go through a lazily built index (id → person, id → children, …).
+   Every mutating method ends in touch(), which drops the index; the next query
+   rebuilds it in one O(n) pass. Without it, children()/partners() scanned the
+   whole people array per call, which made the List view O(n²):
+   receipt — 5,000-person synthetic tree, List render 1,223 ms before the index.
+   Code outside the store that edits parentIds/spouseIds/tags directly MUST call
+   store.invalidate() afterwards, or queries will return stale relationships.
    =========================================================================== */
 function createStore(data, onChange) {
   const ids = new Set();
@@ -753,11 +765,23 @@ function createStore(data, onChange) {
   for (const m of data.marriages) ids.add(m.id);
   for (const ph of data.photos) ids.add(ph.id);
 
-  const touch = () => { data.updatedAt = U.nowISO(); if (onChange) onChange(); };
-  const byId = (arr, id) => arr.find(o => o.id === id) || null;
+  let idx = null;
+  const invalidate = () => { idx = null; };
+  function index() {
+    if (idx) return idx;
+    const personById = new Map(), order = new Map(), childrenOf = new Map(),
+          marriagesOf = new Map(), photoById = new Map(), marriageById = new Map(), photosOf = new Map();
+    const push = (map, k, v) => { const a = map.get(k); if (a) a.push(v); else map.set(k, [v]); };
+    data.people.forEach((p, i) => { personById.set(p.id, p); order.set(p.id, i); });
+    for (const p of data.people) for (const pid of p.parentIds) push(childrenOf, pid, p);
+    for (const m of data.marriages) { marriageById.set(m.id, m); for (const sid of m.spouseIds) push(marriagesOf, sid, m); }
+    for (const ph of data.photos) { photoById.set(ph.id, ph); for (const t of ph.tags) push(photosOf, t.personId, ph); }
+    return (idx = { personById, order, childrenOf, marriagesOf, photoById, marriageById, photosOf });
+  }
+  const touch = () => { idx = null; data.updatedAt = U.nowISO(); if (onChange) onChange(); };
 
   // ---- People -------------------------------------------------------------
-  const person = (id) => byId(data.people, id);
+  const person = (id) => index().personById.get(id) || null;
   const people = () => data.people;
 
   function addPerson(fields = {}) {
@@ -804,6 +828,7 @@ function createStore(data, onChange) {
     data.marriages = data.marriages.filter(m => !m.spouseIds.includes(id));
     for (const ph of data.photos) ph.tags = ph.tags.filter(t => t.personId !== id);
     if (data.layout && data.layout.family) delete data.layout.family[id];
+    if (data.settings && data.settings.homePersonId === id) data.settings.homePersonId = null;
     touch();
     return true;
   }
@@ -828,12 +853,16 @@ function createStore(data, onChange) {
 
   // ---- Parent / child / sibling ------------------------------------------
   const parents  = (id) => (person(id)?.parentIds || []).map(pid => person(pid)).filter(Boolean);
-  const children = (id) => data.people.filter(p => p.parentIds.includes(id));
+  /** Children in tree order (a copy — callers may sort it). */
+  const children = (id) => (index().childrenOf.get(id) || []).slice();
 
+  /** Full and half siblings, in tree order. */
   function siblings(id) {
     const p = person(id); if (!p || !p.parentIds.length) return [];
-    const set = new Set(p.parentIds);
-    return data.people.filter(o => o.id !== id && o.parentIds.some(pid => set.has(pid)));
+    const out = new Map();
+    for (const pid of p.parentIds) for (const c of (index().childrenOf.get(pid) || [])) if (c.id !== id) out.set(c.id, c);
+    const order = index().order;
+    return [...out.values()].sort((a, b) => order.get(a.id) - order.get(b.id));
   }
 
   /** All ancestors of id (excluding self) as a Set of ids. Cycle-safe. */
@@ -873,10 +902,10 @@ function createStore(data, onChange) {
 
   // ---- Marriages / spouses / partners ------------------------------------
   const marriages = () => data.marriages;
-  const marriagesOf = (id) => data.marriages.filter(m => m.spouseIds.includes(id));
+  const marriagesOf = (id) => (index().marriagesOf.get(id) || []).slice();
 
   function findMarriage(aId, bId) {
-    return data.marriages.find(m => m.spouseIds.includes(aId) && m.spouseIds.includes(bId)) || null;
+    return (index().marriagesOf.get(aId) || []).find(m => m.spouseIds.includes(bId)) || null;
   }
   function addMarriage(aId, bId, fields = {}) {
     if (!aId || !bId || aId === bId) return null;
@@ -895,7 +924,7 @@ function createStore(data, onChange) {
     touch();
     return m;
   }
-  function updateMarriage(id, patch) { const m = byId(data.marriages, id); if (!m) return null; Object.assign(m, patch); touch(); return m; }
+  function updateMarriage(id, patch) { const m = index().marriageById.get(id); if (!m) return null; Object.assign(m, patch); touch(); return m; }
   function removeMarriage(id) { const n = data.marriages.length; data.marriages = data.marriages.filter(m => m.id !== id); if (data.marriages.length !== n) { touch(); return true; } return false; }
 
   function spouses(id) {
@@ -920,7 +949,7 @@ function createStore(data, onChange) {
     return [...map.values()].map(x => ({ ...x, children: childrenOfCouple(id, x.person.id) }));
   }
   function childrenOfCouple(aId, bId) {
-    return data.people.filter(p => p.parentIds.includes(aId) && p.parentIds.includes(bId));
+    return (index().childrenOf.get(aId) || []).filter(p => p.parentIds.includes(bId));
   }
   /** Children of `id` that have no other recorded parent (single-parent families). */
   function soleChildren(id) {
@@ -929,7 +958,7 @@ function createStore(data, onChange) {
 
   // ---- Photos -------------------------------------------------------------
   const photos = () => data.photos;
-  const photo = (id) => byId(data.photos, id);
+  const photo = (id) => index().photoById.get(id) || null;
   function addPhoto(fields = {}) {
     const ph = { id: U.uid("ph", ids), filename: fields.filename || "", caption: fields.caption || "",
                  date: fields.date || null, tags: fields.tags || [] };
@@ -953,7 +982,7 @@ function createStore(data, onChange) {
     const n = ph.tags.length; ph.tags = ph.tags.filter(t => t.personId !== personId);
     if (ph.tags.length !== n) { touch(); return true; } return false;
   }
-  const photosOf = (personId) => data.photos.filter(ph => ph.tags.some(t => t.personId === personId));
+  const photosOf = (personId) => (index().photosOf.get(personId) || []).slice();
   function setPrimaryPhoto(personId, photoId) { const p = person(personId); if (!p) return; p.primaryPhotoId = photoId; touch(); }
   function primaryPhoto(personId) {
     const p = person(personId); if (!p) return null;
@@ -971,8 +1000,8 @@ function createStore(data, onChange) {
     if (aId === bId) return [{ id: aId, rel: "self" }];
     const prev = new Map();               // id -> {from, rel}
     const q = [aId]; prev.set(aId, null);
-    while (q.length) {
-      const cur = q.shift();
+    for (let qi = 0; qi < q.length; qi++) {  // index pointer, not shift(): shift is O(n) per pop
+      const cur = q[qi];
       if (cur === bId) break;
       const neighbors = [];
       const p = person(cur);
@@ -1018,7 +1047,7 @@ function createStore(data, onChange) {
   }
 
   return {
-    data, touch,
+    data, touch, invalidate,
     // people
     person, people, addPerson, updatePerson, removePerson, displayName, fullName,
     // relations
@@ -1110,9 +1139,13 @@ const state = FT.state = {
   fileHandle: null,    // FileSystemFileHandle (tree-data.json)
   photosDirHandle: null,
   dirty: false,
+  rev: 0,              // bumped on every change (see markDirty)
+  savedRev: 0,         // rev most recently written to disk
+  saveError: null,     // message from the last failed save, cleared on success
+  backupDone: false,   // tree-data.backup.json written for this session?
   currentView: "family",
   selectedId: null,
-  usingFS: false       // true when File System Access API is in use
+  focusId: null        // who the Family/Pedigree view is built around
 };
 
 /* ==== SECTION: Toast helper ================================================= */
@@ -1131,23 +1164,37 @@ FT.toast = toast;
    value (or null on backdrop/Esc/close). `body` is an HTML string or a Node.
    actions: [{label, value, kind?('primary'|'danger'|'ghost'), keep?:bool}]
    =========================================================================== */
+/* Open dialogs, top last. Only the top one reacts to Esc/Tab, so a picker
+   opened from inside another dialog closes alone. */
+const modalStack = [];
+let _modalSeq = 0;
 function modal({ title = "", body = "", actions = [{ label: "OK", value: true, kind: "primary" }], onBody } = {}) {
   return new Promise((resolve) => {
+    const opener = document.activeElement;
+    const titleId = "modal-title-" + (++_modalSeq);
     const back = document.createElement("div");
     back.className = "modal-back";
     const box = document.createElement("div");
     box.className = "modal";
+    box.setAttribute("role", "dialog"); box.setAttribute("aria-modal", "true"); box.setAttribute("aria-labelledby", titleId);
     const head = document.createElement("header");
-    head.innerHTML = `<h2>${U.escapeHtml(title)}</h2><span class="spacer"></span>`;
+    head.innerHTML = `<h2 id="${titleId}">${U.escapeHtml(title)}</h2><span class="spacer"></span>`;
     const closeX = document.createElement("button");
-    closeX.className = "btn ghost icon-btn"; closeX.textContent = "✕";
+    closeX.className = "btn ghost icon-btn"; closeX.textContent = "✕"; closeX.setAttribute("aria-label", "Close");
     head.appendChild(closeX);
     const bodyEl = document.createElement("div");
     bodyEl.className = "body";
     if (typeof body === "string") bodyEl.innerHTML = body; else bodyEl.appendChild(body);
     const foot = document.createElement("footer");
 
-    function done(v) { document.removeEventListener("keydown", onKey); back.remove(); resolve(v); }
+    const entry = { done: null };
+    function done(v) {
+      const i = modalStack.indexOf(entry); if (i < 0) return;       // already closed
+      modalStack.splice(i, 1);
+      back.remove(); resolve(v);
+      if (opener && opener.isConnected && typeof opener.focus === "function") opener.focus();
+    }
+    entry.done = done; entry.box = box;
     for (const a of actions) {
       const b = document.createElement("button");
       b.className = "btn " + (a.kind || "");
@@ -1157,22 +1204,41 @@ function modal({ title = "", body = "", actions = [{ label: "OK", value: true, k
     }
     closeX.addEventListener("click", () => done(null));
     back.addEventListener("mousedown", (e) => { if (e.target === back) done(null); });
-    function onKey(e) { if (e.key === "Escape") done(null); }
-    document.addEventListener("keydown", onKey);
 
     box.appendChild(head); box.appendChild(bodyEl); box.appendChild(foot);
     back.appendChild(box); document.body.appendChild(back);
+    modalStack.push(entry);
     if (onBody) onBody(bodyEl, done);
-    const firstPrimary = foot.querySelector(".primary") || foot.querySelector("button");
-    if (firstPrimary) firstPrimary.focus();
+    if (!box.contains(document.activeElement)) {
+      const firstPrimary = foot.querySelector(".primary") || foot.querySelector("button");
+      if (firstPrimary) firstPrimary.focus();
+    }
   });
 }
 FT.modal = modal;
+document.addEventListener("keydown", (e) => {
+  const top = modalStack[modalStack.length - 1]; if (!top) return;
+  if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); top.done(null); return; }
+  if (e.key === "Tab") {                                   // keep keyboard focus inside the dialog
+    const f = [...top.box.querySelectorAll("button,input,select,textarea,[tabindex]:not([tabindex='-1'])")].filter(x => !x.disabled && x.offsetParent !== null);
+    if (!f.length) return;
+    const first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
+}, true);
+/** Close every open dialog (each resolves as cancelled). */
+function closeAllModals() { while (modalStack.length) modalStack[modalStack.length - 1].done(null); }
 
+/* Save-state chip. States: saved · unsaved · saving · error (the last save
+   failed — the chip says why and clicking it retries). */
 function updateSaveState() {
   const el = document.getElementById("saveState"); if (!el) return;
-  let status, text, icon;
-  if (state.dirty) {
+  let status, text, icon, title = "Save now (Ctrl+S)";
+  if (state.dirty && state.saveError) {
+    status = "error"; text = "Not saved"; icon = `<span class="ss-check">!</span>`;
+    title = `Your latest changes are NOT saved: ${state.saveError} Click to try again.`;
+  } else if (state.dirty) {
     if (prefs.autosave && state.fileHandle) { status = "saving"; text = "Saving…"; icon = `<span class="ss-spin"></span>`; }
     else { status = "unsaved"; text = "Unsaved"; icon = `<span class="ss-dot"></span>`; }
   } else {
@@ -1180,18 +1246,23 @@ function updateSaveState() {
     text = state._savedAt ? "Saved " + state._savedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Saved";
     icon = `<span class="ss-check">✓</span>`;
   }
-  el.dataset.status = status;
+  el.dataset.status = status; el.title = title;
   el.innerHTML = icon + `<span class="ss-text">${text}</span>`;
   const btn = document.getElementById("btnSave"); if (btn) btn.classList.toggle("primary", state.dirty);
 }
+/* Every change bumps state.rev. A save records the rev it serialized, and only
+   clears `dirty` if nothing changed while it was writing — so an edit made
+   during a slow save is never reported as saved. */
 function markDirty() {
+  state.rev++;
   state.dirty = true;
   document.getElementById("app").classList.add("dirty");
   updateSaveState();
   scheduleAutosave();
 }
 function markClean() {
-  state.dirty = false;
+  state.savedRev = state.rev;
+  state.dirty = false; state.saveError = null;
   document.getElementById("app").classList.remove("dirty");
   updateSaveState();
 }
@@ -1206,11 +1277,16 @@ const prefs = FT.prefs = Object.assign(
 function savePrefs() { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (e) { /* file:// / private mode */ } }
 
 /* ==== SECTION: Autosave ==================================================== */
+/* Debounce, so a burst of edits (typing a name, a multi-step link) becomes one
+   write. 1 s is a UX choice, not a measured budget: long enough to coalesce a
+   burst, short enough that closing the tab rarely beats it (and beforeunload
+   still prompts while anything is unsaved). */
+const AUTOSAVE_DELAY_MS = 1000;
 let _autosaveTimer = null;
 function scheduleAutosave() {
   if (!prefs.autosave || !state.fileHandle) return;   // silent autosave needs a folder (File System Access)
   clearTimeout(_autosaveTimer);
-  _autosaveTimer = setTimeout(() => { if (state.dirty) saveFlow(true); }, 1000);
+  _autosaveTimer = setTimeout(() => { if (state.dirty) saveFlow(true); }, AUTOSAVE_DELAY_MS);
 }
 function flushAutosave() { if (prefs.autosave && state.fileHandle && state.dirty) { clearTimeout(_autosaveTimer); saveFlow(true); } }
 
@@ -1219,13 +1295,35 @@ function flushAutosave() { if (prefs.autosave && state.fileHandle && state.dirty
    so you can jump forward again; making a new change truncates the forward
    states. Snapshots for one user action are coalesced via a microtask.
    =========================================================================== */
+/* Embedded photos (data: URLs, used when there's no photos/ folder) can be
+   megabytes each. Copying them into every snapshot would multiply memory by
+   the history length (receipt: one 200 KB image × 11 snapshots = 2.2 MB of
+   duplicates in tests/history.test.js), so snapshots hold a short token and
+   the image string itself is kept once in `blobs`. */
+const HISTORY_BLOB_MIN = 256;          // strings shorter than a token+overhead aren't worth interning
 const History = FT.history = {
   states: [], cur: -1, scheduled: false, suspend: false, pendingLabel: null,
+  blobs: new Map(), blobTokens: new Map(),
   get enabled() { return prefs.historyEnabled; },
   get max() { return Math.max(1, (prefs.historyMax | 0) || 50); },
+  snapshot(data) {
+    return JSON.stringify(data, (k, v) => {
+      if (k === "_url") return undefined;                          // runtime-only blob: URL
+      if (k === "dataUrl" && typeof v === "string" && v.length >= HISTORY_BLOB_MIN) {
+        let tok = this.blobTokens.get(v);
+        if (!tok) { tok = "\u0000blob:" + this.blobs.size; this.blobs.set(tok, v); this.blobTokens.set(v, tok); }
+        return tok;
+      }
+      return v;
+    });
+  },
+  parse(json) {
+    return JSON.parse(json, (k, v) => (k === "dataUrl" && typeof v === "string" && v.startsWith("\u0000blob:") ? this.blobs.get(v) : v));
+  },
   init(label) {
+    this.blobs = new Map(); this.blobTokens = new Map();
     if (!state.data) { this.states = []; this.cur = -1; this.refresh(); return; }
-    this.states = this.enabled ? [{ json: serializeTree(state.data), label: label || "Opened", time: Date.now() }] : [];
+    this.states = this.enabled ? [{ json: this.snapshot(state.data), label: label || "Opened", time: Date.now() }] : [];
     this.cur = this.states.length - 1; this.scheduled = false; this.pendingLabel = null; this.refresh();
   },
   schedule(label) {
@@ -1237,7 +1335,7 @@ const History = FT.history = {
   flush() {
     this.scheduled = false;
     if (this.suspend || !this.enabled || !state.data) return;
-    const json = serializeTree(state.data);
+    const json = this.snapshot(state.data);
     if (this.cur >= 0 && this.states[this.cur] && this.states[this.cur].json === json) { this.pendingLabel = null; return; }
     this.states = this.states.slice(0, this.cur + 1);
     this.states.push({ json, label: this.pendingLabel || "Edit", time: Date.now() });
@@ -1253,21 +1351,14 @@ const History = FT.history = {
   restore(json) {
     this.suspend = true;
     try {
-      const data = normalizeLoaded(JSON.parse(json));
-      const pf = state.focusId, psel = state.selectedId, ppanel = V.panelId, pview = state.currentView;
-      if (typeof revokePhotoURLs === "function") revokePhotoURLs(state.data);
-      state.data = data;
-      state.store = createStore(data, onTreeChanged);
-      state.focusId = state.store.person(pf) ? pf : (data.people[0] ? data.people[0].id : null);
-      state.selectedId = state.store.person(psel) ? psel : state.focusId;
-      state.currentView = pview;
-      document.getElementById("treeNameInput").value = data.treeName || "My Family Tree";
+      const ppanel = V.panelId;
+      adoptTree(normalizeLoaded(this.parse(json)), { keepView: true });
       markDirty(); render();
       if (ppanel && state.store.person(ppanel)) openPanel(ppanel); else closePanel();
-      if (typeof refreshPhotoURLs === "function") refreshPhotoURLs();
+      refreshPhotoURLs();
     } finally { this.suspend = false; this.refresh(); }
   },
-  refresh() { if (typeof renderHistoryPanel === "function") renderHistoryPanel(); if (typeof updateHistoryButtons === "function") updateHistoryButtons(); }
+  refresh() { renderHistoryPanel(); updateHistoryButtons(); }
 };
 
 /* Called by the store on every tree-data change: record history + mark dirty. */
@@ -1278,60 +1369,60 @@ function onTreeChanged() {
 }
 FT.onTreeChanged = onTreeChanged;
 
-/* ==== SECTION: Boot / open a tree into the UI ==============================
-   Full folder-based persistence arrives in the Save/Load stage. For now,
-   "Create a New Tree" opens an in-memory tree so the data model is usable
-   and testable end-to-end.
+/* ==== SECTION: Open / replace the tree in the UI ============================
+   adoptTree swaps in a new data object and re-derives UI state from it. It is
+   the one place that decides who is in focus: "me" if set, else whoever was in
+   focus before (when they still exist), else the first person.
    =========================================================================== */
-function openTree(data, { dirHandle = null, fileHandle = null, historyLabel = "Opened" } = {}) {
-  if (typeof revokePhotoURLs === "function") revokePhotoURLs(state.data);
+function adoptTree(data, { keepView = false } = {}) {
+  const prevFocus = state.focusId, prevSel = state.selectedId;
+  revokePhotoURLs(state.data);
   state.data = data;
   state.store = createStore(data, onTreeChanged);
+  const exists = (id) => id && state.store.person(id);
+  const home = exists(data.settings && data.settings.homePersonId) ? data.settings.homePersonId : null;
+  const first = data.people[0] ? data.people[0].id : null;
+  state.focusId = keepView && exists(prevFocus) ? prevFocus : (home || first);
+  state.selectedId = keepView && exists(prevSel) ? prevSel : state.focusId;
+  if (!keepView) {
+    state.currentView = (data.settings && data.settings.defaultView) || "family";
+    state._search = "";
+    V.cam = { family: null, pedigree: null }; V.collapsed = new Set();
+    closePanel();
+  }
+  state.pendingLabel = null;
+  document.getElementById("treeNameInput").value = data.treeName || "My Family Tree";
+}
+
+function openTree(data, { dirHandle = null, fileHandle = null, historyLabel = "Opened" } = {}) {
+  adoptTree(data);
   state.dirHandle = dirHandle;
   state.fileHandle = fileHandle;
   state.photosDirHandle = null;   // set by the load/new flows when File System Access is used
-  state.selectedId = data.people[0] ? data.people[0].id : null;
-  state.focusId = state.selectedId;
-  state.currentView = (data.settings && data.settings.defaultView) || "family";
-  state._search = "";
-  state.pendingLabel = null;
-  if (FT.views) { FT.views.cam = { family: null, pedigree: null }; FT.views.collapsed = new Set(); }
-  const sp = document.getElementById("sidePanel"); if (sp) sp.classList.remove("open");
-
+  state.backupDone = false; state.saveError = null;
+  state._savedAt = fileHandle ? new Date() : null;
   document.getElementById("startScreen").classList.add("hidden");
   document.getElementById("app").style.display = "grid";
-  document.getElementById("treeNameInput").value = data.treeName || "My Family Tree";
   markClean();
   render();
   History.init(historyLabel);
 }
 FT.openTree = openTree;
 
-/* Central re-render entry point. In this stage it only refreshes chrome + the
-   placeholder stats; view rendering is added in the Views stage. */
-function render() {
-  if (!state.store) return;
-  const s = state.store.stats();
-  const empty = document.getElementById("stageEmpty");
-  const hasPeople = s.people > 0;
-  empty.style.display = hasPeople ? "none" : "flex";
-  const dev = document.getElementById("devStats");
-  if (dev) {
-    dev.innerHTML = "";
-    const chips = [["People", s.people], ["Marriages", s.marriages], ["Photos", s.photos], ["Generations", s.generations]];
-    for (const [l, n] of chips) {
-      const d = document.createElement("div"); d.className = "stat";
-      d.innerHTML = `<div class="n">${n}</div><div class="l">${l}</div>`;
-      dev.appendChild(d);
-    }
-  }
+/** Replace the open tree's contents (e.g. a GEDCOM import) as ONE undoable step,
+    keeping the folder it saves to. */
+function replaceTreeData(data, label) {
+  adoptTree(data);
+  state.pendingLabel = label;
+  onTreeChanged();
+  render();
+  refreshPhotoURLs();
 }
-FT.render = render;
+FT.replaceTreeData = replaceTreeData;
 
-/* ==== SECTION: Start-screen & top-bar wiring (minimal for this stage) ====== */
+/* ==== SECTION: Start screen & top-bar wiring ================================ */
 function detectCompat() {
   const hasFS = "showDirectoryPicker" in window;
-  state.usingFS = hasFS;
   const warn = document.getElementById("compatWarn");
   if (!hasFS) {
     warn.classList.remove("hidden");
@@ -1345,48 +1436,158 @@ function detectCompat() {
    The JSON file input below is the no-File-System-Access fallback for Load. */
 document.getElementById("fileJson").addEventListener("change", async (e) => {
   const f = e.target.files[0]; if (!f) return;
-  try {
-    const data = normalizeLoaded(JSON.parse(await f.text()));
-    openTree(data);
-    toast(`Loaded “${data.treeName}” (${data.people.length} people).`, "ok");
-  } catch (err) { toast("Could not read that file: " + err.message, "err", 5000); }
   e.target.value = "";
+  let parsed;
+  try { parsed = parseTreeFile(await f.text()); }
+  catch (err) { toast("Could not open that file: " + err.message, "err", 7000); return; }
+  openTree(parsed.data);
+  toast(`Loaded “${parsed.data.treeName}” (${parsed.data.people.length} people).`, "ok");
+  reportRepairs(parsed.repairs);
 });
 
-/* Accept older/loose JSON and fill in any missing fields. */
-function normalizeLoaded(raw) {
+/* ==== SECTION: Loading & repairing tree files ================================
+   parseTreeFile(text) -> { data, repairs[] }   (throws only if it isn't a tree)
+   normalizeLoaded(raw, repairs?) -> data
+
+   A tree file may be hand-edited, half-written by another tool, or from a newer
+   version of this app. Rather than crash mid-render later, loading coerces every
+   record into the shape the app expects and reports each fix in `repairs`, so
+   the user is told exactly what changed. Loading never throws for bad records —
+   only for input that isn't a tree at all.
+   =========================================================================== */
+const SEXES = new Set(["M", "F", "U"]);
+const VIEWS = new Set(["family", "pedigree", "list", "timeline"]);
+const IMAGE_DATA_URL = /^data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=\s]*$/i;
+
+function parseTreeFile(text) {
+  let raw;
+  try { raw = JSON.parse(text); }
+  catch (e) { throw new Error(`This file is not valid JSON (${e.message}). It may be damaged — if it's your tree, try ${"tree-data.backup.json"} from the same folder.`); }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw) || !Array.isArray(raw.people))
+    throw new Error("This file doesn't look like a family tree (it has no \"people\" list).");
+  const repairs = [];
+  const data = normalizeLoaded(raw, repairs);
+  return { data, repairs };
+}
+FT.parseTreeFile = parseTreeFile;
+
+function normalizeLoaded(raw, repairs = []) {
   if (!raw || typeof raw !== "object") throw new Error("Not a tree file.");
-  const data = emptyTree(raw.treeName);
-  Object.assign(data, {
-    schemaVersion: raw.schemaVersion || SCHEMA_VERSION,
-    treeName: raw.treeName || "My Family Tree",
-    createdAt: raw.createdAt || U.nowISO(),
-    updatedAt: raw.updatedAt || U.nowISO(),
-    settings: Object.assign({ defaultView: "family", generationDepth: 3 }, raw.settings || {}),
-    people: Array.isArray(raw.people) ? raw.people : [],
-    marriages: Array.isArray(raw.marriages) ? raw.marriages : [],
-    photos: Array.isArray(raw.photos) ? raw.photos : [],
-    layout: raw.layout || { family: {} }
-  });
-  // backfill person field defaults
-  for (const p of data.people) {
-    p.alternateNames = p.alternateNames || [];
-    p.parentIds = p.parentIds || [];
-    p.birth = p.birth || { date: null, place: "" };
-    if (p.death === undefined) p.death = null;
-    p.sex = p.sex || "U";
-    for (const k of ["firstName", "lastName", "maidenName", "education", "occupation", "notes"]) p[k] = p[k] || "";
+  const note = (msg) => repairs.push(msg);
+  const str = (v) => (v == null ? "" : typeof v === "string" ? v : String(v));
+  const isObj = (v) => v && typeof v === "object" && !Array.isArray(v);
+  const date = (v) => {
+    if (v == null || v === "") return null;
+    if (typeof v === "string" || typeof v === "number") return U.parseDate(String(v));
+    if (!isObj(v)) return null;
+    if (v.year == null && v.month == null && !v.original) return null;
+    const y = Number.isFinite(+v.year) && v.year !== null ? +v.year : null;
+    return { original: str(v.original), year: y, month: +v.month >= 1 && +v.month <= 12 ? +v.month : null,
+      day: +v.day >= 1 && +v.day <= 31 ? +v.day : null, qualifier: v.qualifier ? str(v.qualifier) : null,
+      iso: v.iso ? str(v.iso) : null, approx: !!v.approx };
+  };
+  const event = (v) => (isObj(v) ? { date: date(v.date), place: str(v.place) } : typeof v === "string" ? { date: U.parseDate(v), place: "" } : null);
+
+  const version = +raw.schemaVersion || SCHEMA_VERSION;
+  if (version > SCHEMA_VERSION) note(`This file was saved by a newer version of the app (format ${version}; this version reads format ${SCHEMA_VERSION}). Some details may not show, and saving here could drop them — consider updating the app.`);
+
+  const data = emptyTree(str(raw.treeName) || "My Family Tree");
+  data.createdAt = str(raw.createdAt) || U.nowISO();
+  data.updatedAt = str(raw.updatedAt) || U.nowISO();
+  data.settings = Object.assign({ defaultView: "family", generationDepth: 3 }, isObj(raw.settings) ? raw.settings : {});
+  data.layout = isObj(raw.layout) ? raw.layout : { family: {} };
+
+  // People: keep every object, give each a unique id, coerce every field.
+  const ids = new Set();
+  const freshId = (prefix) => U.uid(prefix, ids);
+  const rawPeople = Array.isArray(raw.people) ? raw.people : [];
+  let junk = 0, reIded = 0;
+  for (const p of rawPeople) {
+    if (!isObj(p)) { junk++; continue; }
+    let id = typeof p.id === "string" && p.id ? p.id : null;
+    if (!id || ids.has(id)) { reIded++; id = freshId("p"); } else ids.add(id);
+    const sex = SEXES.has(p.sex) ? p.sex : "U";
+    data.people.push(Object.assign({}, p, {
+      id, sex,
+      firstName: str(p.firstName), lastName: str(p.lastName), maidenName: str(p.maidenName),
+      education: str(p.education), occupation: str(p.occupation), notes: str(p.notes),
+      alternateNames: Array.isArray(p.alternateNames) ? p.alternateNames.map(str).filter(Boolean) : [],
+      birth: event(p.birth) || { date: null, place: "" },
+      death: p.death === true ? { date: null, place: "" } : event(p.death),
+      parentIds: Array.isArray(p.parentIds) ? p.parentIds.filter(x => typeof x === "string") : [],
+      primaryPhotoId: typeof p.primaryPhotoId === "string" ? p.primaryPhotoId : null
+    }));
   }
-  for (const ph of data.photos) ph.tags = ph.tags || [];
+  if (junk) note(`Skipped ${junk} entr${junk === 1 ? "y" : "ies"} in the people list that weren't people.`);
+  if (reIded) note(`Gave ${reIded} ${reIded === 1 ? "person" : "people"} a new id (missing or duplicated).`);
+
+  // Parent links must point at someone else who exists, once.
+  let badLinks = 0;
+  for (const p of data.people) {
+    const kept = [];
+    for (const pid of p.parentIds) if (pid !== p.id && ids.has(pid) && !kept.includes(pid)) kept.push(pid); else badLinks++;
+    p.parentIds = kept;
+  }
+  if (badLinks) note(`Removed ${badLinks} parent link${badLinks === 1 ? "" : "s"} to missing people (or to themselves).`);
+
+  // Marriages: exactly two different, existing people.
+  let badM = 0;
+  for (const m of Array.isArray(raw.marriages) ? raw.marriages : []) {
+    const sp = isObj(m) && Array.isArray(m.spouseIds) ? m.spouseIds : [];
+    if (sp.length !== 2 || sp[0] === sp[1] || !ids.has(sp[0]) || !ids.has(sp[1])) { badM++; continue; }
+    let id = typeof m.id === "string" && m.id && !ids.has(m.id) ? m.id : freshId("m"); ids.add(id);
+    data.marriages.push(Object.assign({}, m, { id, spouseIds: [sp[0], sp[1]], date: date(m.date), place: str(m.place),
+      divorced: !!m.divorced, divorceDate: date(m.divorceDate), notes: str(m.notes) }));
+  }
+  if (badM) note(`Removed ${badM} marriage record${badM === 1 ? "" : "s"} that didn't name two people in this tree.`);
+
+  // Photos: tags must point at people; embedded images must really be images.
+  let badTags = 0, badImg = 0, badPh = 0;
+  for (const ph of Array.isArray(raw.photos) ? raw.photos : []) {
+    if (!isObj(ph)) { badPh++; continue; }
+    let id = typeof ph.id === "string" && ph.id && !ids.has(ph.id) ? ph.id : freshId("ph"); ids.add(id);
+    const tags = (Array.isArray(ph.tags) ? ph.tags : []).filter(t => { const ok = isObj(t) && ids.has(t.personId); if (!ok) badTags++; return ok; });
+    const out = Object.assign({}, ph, { id, filename: str(ph.filename), caption: str(ph.caption), date: date(ph.date), tags });
+    delete out._url;
+    if (out.dataUrl != null && !(typeof out.dataUrl === "string" && IMAGE_DATA_URL.test(out.dataUrl))) { delete out.dataUrl; badImg++; }
+    data.photos.push(out);
+  }
+  if (badPh) note(`Skipped ${badPh} photo entr${badPh === 1 ? "y" : "ies"} that weren't photos.`);
+  if (badTags) note(`Removed ${badTags} photo tag${badTags === 1 ? "" : "s"} for people not in this tree.`);
+  if (badImg) note(`Dropped ${badImg} embedded image${badImg === 1 ? "" : "s"} that weren't valid image data.`);
+  const photoIds = new Set(data.photos.map(p => p.id));
+  for (const p of data.people) if (p.primaryPhotoId && !photoIds.has(p.primaryPhotoId)) p.primaryPhotoId = null;
+
+  // Settings that point at things.
+  const s = data.settings;
+  if (s.homePersonId != null && !ids.has(s.homePersonId)) { s.homePersonId = null; note("Cleared “this is me”: that person isn't in the tree."); }
+  const depth = Math.round(+s.generationDepth);
+  s.generationDepth = depth >= 2 && depth <= 6 ? depth : 3;
+  if (!VIEWS.has(s.defaultView)) s.defaultView = "family";
+  // Keep top-level fields this version doesn't know (a newer app may have added
+  // them); per-record unknown fields are kept by the Object.assign calls above.
+  for (const k of Object.keys(raw)) if (!(k in data)) data[k] = raw[k];
+  data.schemaVersion = Math.max(version, SCHEMA_VERSION);
   return data;
 }
 FT.normalizeLoaded = normalizeLoaded;
+
+/** Tell the user what loading had to fix (only when something was fixed). */
+function reportRepairs(repairs) {
+  if (!repairs || !repairs.length) return;
+  modal({ title: "Some problems in this file were fixed", body:
+    `<p style="line-height:1.6">The tree opened fine, but a few records needed repair:</p>
+     <ul style="line-height:1.6;margin:6px 0 10px 20px">${repairs.map(r => `<li>${U.escapeHtml(r)}</li>`).join("")}</ul>
+     <p style="line-height:1.6;color:var(--ink-soft)">Nothing is written to disk until the next save. The original file stays as it is until then.</p>`,
+    actions: [{ label: "OK", value: true, kind: "primary" }] });
+}
 
 // Rename tree
 document.getElementById("treeNameInput").addEventListener("change", (e) => {
   if (!state.data) return;
   state.data.treeName = e.target.value.trim() || "My Family Tree";
-  markDirty();
+  state.pendingLabel = "Rename tree";
+  state.store.touch();                 // history step + dirty, like any other edit
 });
 
 // Add a person, then focus + open the edit panel so the user can fill them in.
@@ -1405,12 +1606,16 @@ document.getElementById("btnAddPerson").addEventListener("click", () => {
   if (!wasEmpty) toast("Person added — link them in with “＋ Add …” below, or use the ＋ on a card.", "", 5000);
 });
 document.getElementById("btnImportGed").addEventListener("click", () => document.getElementById("fileGed").click());
+document.getElementById("btnEmptyAdd").addEventListener("click", () => document.getElementById("btnAddPerson").click());
+document.getElementById("btnEmptyImport").addEventListener("click", () => document.getElementById("fileGed").click());
 
-// Warn before leaving with unsaved changes.
+// Warn before leaving with unsaved changes. With autosave on, start the write
+// now — it usually finishes while the browser's "Leave site?" prompt is up, but
+// a write can't be awaited here, so we still ask rather than risk losing it.
 window.addEventListener("beforeunload", (e) => {
   if (!state.dirty) return;
-  if (prefs.autosave && state.fileHandle) { flushAutosave(); return; }   // autosaving: best effort, no nag
-  e.preventDefault(); e.returnValue = "";                                 // remind the user to save
+  flushAutosave();
+  e.preventDefault(); e.returnValue = "";
 });
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flushAutosave(); });
 
@@ -1459,12 +1664,21 @@ FT.parseGEDCOM = function parseGEDCOM(text) {
   const isPointer = (v) => typeof v === "string" && /^@[^@]+@$/.test(v.trim());
   function nodeText(n) {
     if (!n) return "";
-    let s = n.value || "";
+    let s = (n.value || "").replace(/@@/g, "@");            // GEDCOM escapes a literal @ as @@
     for (const c of n.children) {
       if (c.tag === "CONC") s += nodeText(c);
       else if (c.tag === "CONT") s += "\n" + nodeText(c);
     }
     return s;
+  }
+  /* GEDCOM dates, including the forms our exporter writes to avoid losing text:
+     "(free text)" is a date phrase; "INT 1990 (sometime in 1990)" is an
+     interpreted date whose phrase is what the person typed. */
+  function gedDate(raw) {
+    const s = (raw || "").trim(); let m;
+    if ((m = s.match(/^\((.*)\)$/))) return FT.util.parseDate(m[1]);
+    if ((m = s.match(/^INT\s+(.+?)\s*\((.*)\)$/i))) { const d = FT.util.parseDate(m[1]); if (d) { d.original = m[2]; d.qualifier = null; d.approx = false; } return d; }
+    return FT.util.parseDate(s);
   }
   function basename(path) {
     if (!path) return "";
@@ -1486,7 +1700,8 @@ FT.parseGEDCOM = function parseGEDCOM(text) {
     const fileNode = kid(rec, "FILE");
     const file = fileNode ? nodeText(fileNode) : "";
     const title = nodeText(kid(rec, "TITL")) || (fileNode ? nodeText(kid(fileNode, "TITL")) : "");
-    const primary = (nodeText(kid(rec, "_PRIM")) || "").toUpperCase() === "Y";
+    // _PRIM (profile photo) may sit on the person's link to the photo or on the photo record.
+    const primary = (nodeText(kid(node, "_PRIM")) || nodeText(kid(rec, "_PRIM")) || "").toUpperCase() === "Y";
     return file ? { file, title, primary, xref: rec.xref || null } : null;
   }
 
@@ -1521,12 +1736,12 @@ FT.parseGEDCOM = function parseGEDCOM(text) {
   }
   function eventDatePlace(indi, tag) {
     const ev = kid(indi, tag); if (!ev) return { date: null, place: "" };
-    return { date: FT.util.parseDate(nodeText(kid(ev, "DATE"))), place: nodeText(kid(ev, "PLAC")) };
+    return { date: gedDate(nodeText(kid(ev, "DATE"))), place: nodeText(kid(ev, "PLAC")) };
   }
 
   // Pass 1: INDI -> Person
   for (const indi of indiRecs) {
-    if (!indi.xref) { warnings.push(`An INDI record near line has no id and was skipped.`); continue; }
+    if (!indi.xref) { warnings.push(`An INDI record for "${(nodeText(kid(indi, "NAME")) || "?").replace(/\//g, "")}" has no @id@ and was skipped (its family links couldn't be resolved).`); continue; }
     const nm = parseName(indi);
     const sexRaw = (nodeText(kid(indi, "SEX")) || "").toUpperCase();
     const sex = sexRaw === "M" ? "M" : sexRaw === "F" ? "F" : "U";
@@ -1571,23 +1786,33 @@ FT.parseGEDCOM = function parseGEDCOM(text) {
       const child = store.person(cid); if (!child) continue;
       for (const pid of parents) if (!child.parentIds.includes(pid)) child.parentIds.push(pid);
     }
-    if (hId && wId) {
+    store.invalidate();          // parentIds were edited directly above
+    // A FAM with two partners is a marriage unless it's explicitly marked as
+    // unmarried (our exporter's _UNMARRIED, other apps' _STAT, GEDCOM 7's NO MARR).
+    const stat = (nodeText(kid(fam, "_STAT")) || "").toUpperCase();
+    const unmarried = (nodeText(kid(fam, "_UNMARRIED")) || "").toUpperCase() === "Y" ||
+      /NOT MARRIED|NEVER MARRIED|UNMARRIED|PARTNERS/.test(stat) ||
+      kids(fam, "NO").some(n => (n.value || "").trim().toUpperCase() === "MARR");
+    if (hId && wId && !unmarried) {
       const marrEv = kid(fam, "MARR"), divEv = kid(fam, "DIV");
       store.addMarriage(hId, wId, {
-        date: marrEv ? FT.util.parseDate(nodeText(kid(marrEv, "DATE"))) : null,
+        date: marrEv ? gedDate(nodeText(kid(marrEv, "DATE"))) : null,
         place: marrEv ? nodeText(kid(marrEv, "PLAC")) : "",
         divorced: !!divEv,
-        divorceDate: divEv ? FT.util.parseDate(nodeText(kid(divEv, "DATE"))) : null
+        divorceDate: divEv ? gedDate(nodeText(kid(divEv, "DATE"))) : null,
+        notes: kids(fam, "NOTE").map(n => (isPointer(n.value) ? noteText(n.value) : nodeText(n))).filter(Boolean).join("\n\n")
       });
       marriageCount++;
     }
   }
 
-  // Tree name from HEAD (best-effort).
+  // Tree name + character set from HEAD (best-effort).
   const head = roots.find(r => r.tag === "HEAD");
   if (head) {
     const fn = nodeText(kid(head, "FILE"));
     if (fn) data.treeName = fn.replace(/\.ged$/i, "") || data.treeName;
+    const cs = (nodeText(kid(head, "CHAR")) || "").toUpperCase();
+    if (cs === "ANSEL") warnings.unshift("This file says it uses the old ANSEL character set. It was read as Windows-1252, so some accented letters may look wrong — if you can, export it again as UTF-8.");
   }
 
   data.updatedAt = FT.util.nowISO();
@@ -1599,6 +1824,179 @@ FT.parseGEDCOM = function parseGEDCOM(text) {
   };
   return { data, report, photoRefs };
 };
+
+/* ==== SECTION: GEDCOM export ================================================
+   exportGEDCOM(data) -> string (GEDCOM 5.5.1, UTF-8, CRLF)
+
+   The way out: any genealogy app (MyHeritage, Ancestry, Gramps, FamilySearch…)
+   can read this. Round-trip tested in tests/gedcom.test.js. What it keeps:
+   names (birth surname as SURN, current surname as _MARNM, other names as extra
+   NAME lines), sex, birth/death date+place, deceased-without-date (DEAT Y),
+   occupation, education, notes, marriages (date, place, divorce, notes),
+   unmarried co-parents (_UNMARRIED Y), single-parent families, and photo
+   references (photos/<file>, caption, profile photo). Dates the app couldn't
+   structure are written as date phrases so the typed text survives.
+   Not included: the image files themselves (GEDCOM can't hold them) and
+   app-only settings (card display, "this is me").
+   =========================================================================== */
+const GED_MAX_VALUE = 200;   // chars per line value; GEDCOM's hard limit is 255 per line including level/tag
+function exportGEDCOM(data) {
+  const out = [];
+  const MON = U.MONTH_DISP.map(m => m.toUpperCase());
+  const esc = (s) => String(s).replace(/@/g, "@@");
+  /** Push one tag, splitting long values with CONC and newlines with CONT. */
+  function line(level, tag, value, xref) {
+    const head = level + (xref ? " " + xref : "") + " " + tag;
+    if (value == null || value === "") { out.push(head); return; }
+    const parts = String(value).replace(/\r\n?/g, "\n").split("\n");
+    parts.forEach((part, i) => {
+      let rest = esc(part), first = true;
+      do {
+        let cut = rest.length <= GED_MAX_VALUE ? rest.length : GED_MAX_VALUE;
+        // don't split next to a space (readers may trim it) or inside a surrogate pair / @@ escape
+        while (cut < rest.length && cut > 1 && (rest[cut] === " " || rest[cut - 1] === " " || /[\uDC00-\uDFFF]/.test(rest[cut]) || (rest[cut - 1] === "@" && rest[cut] === "@"))) cut--;
+        const chunk = rest.slice(0, cut); rest = rest.slice(cut);
+        if (i === 0 && first) out.push(chunk ? head + " " + chunk : head);
+        else out.push((level + 1) + " " + (first ? "CONT" : "CONC") + (chunk ? " " + chunk : ""));
+        first = false;
+      } while (rest.length);
+    });
+  }
+  /** A pointer to another record (@I1@ …) — never @-escaped. */
+  const ref = (level, tag, xref) => out.push(level + " " + tag + " " + xref);
+  function gedDateStr(d) {
+    if (!d) return "";
+    const orig = (d.original || "").trim();
+    if (d.year == null && !d.month) return orig ? `(${orig.replace(/[()]/g, "")})` : "";
+    const core = [d.day && d.month ? d.day : null, d.month ? MON[d.month - 1] : null, d.year != null ? d.year : null].filter(x => x != null).join(" ");
+    if (d.qualifier === "BET" || d.qualifier === "FROM") {                 // ranges: keep the typed range if it's GEDCOM-shaped
+      const up = orig.toUpperCase();
+      return /^(BET(WEEN)?|FROM)\s/.test(up) ? up.replace(/^BETWEEN/, "BET") : core;
+    }
+    if (d.qualifier && ["ABT", "EST", "CAL", "BEF", "AFT", "TO", "INT"].includes(d.qualifier)) return d.qualifier + " " + core;
+    // Exact date: if what was typed says more than the structure, keep it as the phrase.
+    const reparsed = U.parseDate(orig);
+    const same = !orig || (reparsed && reparsed.year === d.year && reparsed.month === d.month && reparsed.day === d.day && !reparsed.qualifier);
+    return same ? core : `INT ${core} (${orig.replace(/[()]/g, "")})`;
+  }
+  function event(level, tag, ev, alwaysEmit) {
+    const date = ev && gedDateStr(ev.date), place = ev && ev.place;
+    if (!date && !place) { if (alwaysEmit) line(level, tag, "Y"); return; }
+    line(level, tag);
+    if (date) line(level + 1, "DATE", date);
+    if (place) line(level + 1, "PLAC", place);
+  }
+
+  // Cross-reference ids: I1…, F1…, O1…
+  const ix = new Map(); data.people.forEach((p, i) => ix.set(p.id, "@I" + (i + 1) + "@"));
+  const ox = new Map(); data.photos.forEach((ph, i) => ox.set(ph.id, "@O" + (i + 1) + "@"));
+
+  // Families: every marriage, plus every distinct set of parents that has children.
+  const fams = [], famByKey = new Map();
+  const keyOf = (ids) => ids.slice().sort().join("|");
+  const famFor = (parentIds) => {
+    const k = keyOf(parentIds);
+    let f = famByKey.get(k);
+    if (!f) { f = { parents: parentIds.slice(), children: [], marriage: null, xref: "@F" + (fams.length + 1) + "@" }; fams.push(f); famByKey.set(k, f); }
+    return f;
+  };
+  for (const m of data.marriages) if (m.spouseIds.length === 2 && ix.has(m.spouseIds[0]) && ix.has(m.spouseIds[1])) famFor(m.spouseIds).marriage = m;
+  for (const p of data.people) {
+    const ps = p.parentIds.filter(id => ix.has(id));
+    if (!ps.length) continue;
+    famFor(ps.slice(0, 2)).children.push(p.id);
+    for (const extra of ps.slice(2)) famFor([extra]).children.push(p.id);     // >2 recorded parents: one extra single-parent family each
+  }
+  const famsOfSpouse = new Map(), famsOfChild = new Map();
+  const add = (map, k, v) => { const a = map.get(k); if (a) a.push(v); else map.set(k, [v]); };
+  for (const f of fams) { for (const id of f.parents) add(famsOfSpouse, id, f.xref); for (const c of f.children) add(famsOfChild, c, f.xref); }
+  const byId = new Map(data.people.map(p => [p.id, p]));
+
+  // Header
+  const today = new Date();
+  line(0, "HEAD");
+  line(1, "SOUR", "FAMILY_TREE_SINGLE_FILE"); line(2, "NAME", "Family Tree (single-file app)");
+  line(1, "DATE", `${today.getDate()} ${MON[today.getMonth()]} ${today.getFullYear()}`);
+  ref(1, "SUBM", "@SUBM1@");
+  line(1, "FILE", (data.treeName || "Family Tree") + ".ged");
+  line(1, "GEDC"); line(2, "VERS", "5.5.1"); line(2, "FORM", "LINEAGE-LINKED");
+  line(1, "CHAR", "UTF-8");
+  line(0, "SUBM", null, "@SUBM1@"); line(1, "NAME", "Family Tree user");
+
+  for (const p of data.people) {
+    line(0, "INDI", null, ix.get(p.id));
+    const birthSurname = p.maidenName || p.lastName || "";
+    line(1, "NAME", `${p.firstName || ""} /${birthSurname.replace(/\//g, "")}/`.trim());
+    if (p.firstName) line(2, "GIVN", p.firstName);
+    if (birthSurname) line(2, "SURN", birthSurname);
+    if (p.maidenName && p.lastName && p.lastName !== p.maidenName) line(2, "_MARNM", p.lastName);
+    for (const alt of p.alternateNames || []) if (alt) line(1, "NAME", alt.replace(/\//g, ""));
+    line(1, "SEX", p.sex === "M" || p.sex === "F" ? p.sex : "U");
+    event(1, "BIRT", p.birth, false);
+    if (p.death) event(1, "DEAT", p.death, true);
+    if (p.occupation) line(1, "OCCU", p.occupation);
+    if (p.education) line(1, "EDUC", p.education);
+    if (p.notes) line(1, "NOTE", p.notes);
+    for (const ph of data.photos) if (ph.tags.some(t => t.personId === p.id)) {
+      ref(1, "OBJE", ox.get(ph.id));
+      if (p.primaryPhotoId === ph.id) line(2, "_PRIM", "Y");
+    }
+    for (const fx of famsOfSpouse.get(p.id) || []) ref(1, "FAMS", fx);
+    for (const fx of famsOfChild.get(p.id) || []) ref(1, "FAMC", fx);
+  }
+
+  for (const f of fams) {
+    line(0, "FAM", null, f.xref);
+    // HUSB/WIFE: GEDCOM 5.5.1 has only these two roles; a man goes in HUSB when there is one.
+    let [a, b] = f.parents;
+    if (b && byId.get(b).sex === "M" && byId.get(a).sex !== "M") [a, b] = [b, a];
+    if (f.parents.length === 1) ref(1, byId.get(a).sex === "F" ? "WIFE" : "HUSB", ix.get(a));
+    else { ref(1, "HUSB", ix.get(a)); ref(1, "WIFE", ix.get(b)); }
+    const m = f.marriage;
+    if (f.parents.length === 2 && !m) line(1, "_UNMARRIED", "Y");
+    if (m) {
+      event(1, "MARR", { date: m.date, place: m.place }, true);
+      if (m.divorced) event(1, "DIV", { date: m.divorceDate, place: "" }, true);
+      if (m.notes) line(1, "NOTE", m.notes);
+    }
+    for (const c of f.children) ref(1, "CHIL", ix.get(c));
+  }
+
+  for (const ph of data.photos) {
+    line(0, "OBJE", null, ox.get(ph.id));
+    const fn = ph.filename || "photo";
+    line(1, "FILE", ph.pending && ph.sourceRef ? ph.sourceRef : PHOTOS_DIR + "/" + fn);
+    const ext = (fn.split(".").pop() || "").toLowerCase();
+    if (/^(jpe?g|png|gif|bmp|tiff?|webp|heic)$/.test(ext)) line(2, "FORM", ext === "jpeg" ? "jpg" : ext);
+    if (ph.caption) line(2, "TITL", ph.caption);
+  }
+  line(0, "TRLR");
+  return out.join("\r\n") + "\r\n";
+}
+FT.exportGEDCOM = exportGEDCOM;
+
+/* Decode a .ged file's bytes. Handles UTF-8 (with/without BOM), UTF-16 LE/BE
+   (with or without BOM — detected from the "0 HEAD" first line), and falls
+   back to Windows-1252 for legacy 8-bit files that aren't valid UTF-8. */
+function decodeGedcomBytes(bytes) {
+  const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const dec = (enc, off = 0, fatal = false) => new TextDecoder(enc, { fatal }).decode(b.subarray(off));
+  if (b[0] === 0xEF && b[1] === 0xBB && b[2] === 0xBF) return dec("utf-8", 3);
+  if (b[0] === 0xFF && b[1] === 0xFE) return dec("utf-16le", 2);
+  if (b[0] === 0xFE && b[1] === 0xFF) return dec("utf-16be", 2);
+  if (b[0] === 0x30 && b[1] === 0x00) return dec("utf-16le");
+  if (b[0] === 0x00 && b[1] === 0x30) return dec("utf-16be");
+  try { return dec("utf-8", 0, true); } catch (e) { return dec("windows-1252"); }
+}
+FT.decodeGedcomBytes = decodeGedcomBytes;
+
+function exportGEDCOMFlow() {
+  if (!state.data) return;
+  const name = (state.data.treeName || "family-tree").replace(/[\\/:*?"<>|]+/g, "_");
+  downloadFile(exportGEDCOM(state.data), name + ".ged", "text/plain;charset=utf-8");
+  const n = state.data.photos.length;
+  toast(`Exported ${state.data.people.length} people to ${name}.ged` + (n ? ` — photos are referenced, not included; keep the photos/ folder alongside.` : "."), "ok", 6000);
+}
 
 /* Import flow (spec §GEDCOM Import — Photo Handling): parse, summarize, and let
    the user keep or cancel. Replaces the current tree's contents on "keep". */
@@ -1633,21 +2031,16 @@ async function importGEDCOMText(text) {
     actions: [{ label: "Cancel", value: "cancel" }, { label: "Keep imported tree", value: "keep", kind: "primary" }]
   });
   if (choice !== "keep") return;
-  const name = result.data.treeName;
-  const prevPhotosDir = state.photosDirHandle;
-  openTree(result.data, { dirHandle: state.dirHandle, fileHandle: state.fileHandle, historyLabel: "Imported GEDCOM" });
-  state.photosDirHandle = prevPhotosDir;   // keep writing photos into the same folder
-  markDirty();
-  toast(`Imported ${r.people} people from GEDCOM${r.unresolvedPhotos ? " — photos to add later" : ""}.`, "ok", 4200);
-  document.getElementById("treeNameInput").value = name;
+  replaceTreeData(result.data, "Imported GEDCOM");     // one undoable step; keeps the folder
+  toast(`Imported ${r.people} people from GEDCOM${r.unresolvedPhotos ? " — photos to add later" : ""}. Undo (Ctrl+Z) brings the previous tree back.`, "ok", 5200);
 }
 FT.importGEDCOMText = importGEDCOMText;
 
 document.getElementById("fileGed").addEventListener("change", async (e) => {
   const f = e.target.files[0]; if (!f) return;
-  try { await importGEDCOMText(await f.text()); }
-  catch (err) { toast("Could not read that file: " + err.message, "err", 5000); }
   e.target.value = "";
+  try { await importGEDCOMText(decodeGedcomBytes(await f.arrayBuffer())); }
+  catch (err) { toast("Could not read that file: " + err.message, "err", 5000); }
 });
 /* ==== SECTION: Persistence — files, folders, save/load ======================
    Chrome/Edge: the File System Access API reads & writes tree-data.json and the
@@ -1662,20 +2055,23 @@ const supportsFS = () => "showDirectoryPicker" in window;
 /** JSON for tree-data.json. Strips runtime-only fields (blob object URLs). */
 function serializeTree(data) {
   const clone = U.deepClone(data);
-  clone.schemaVersion = SCHEMA_VERSION;
+  clone.schemaVersion = Math.max(+data.schemaVersion || 0, SCHEMA_VERSION);   // never down-label a newer file
   for (const ph of clone.photos) delete ph._url;   // never persist blob: URLs
   return JSON.stringify(clone, null, 2);
 }
 FT.serializeTree = serializeTree;
 
 // ---- File System Access primitives ----
-async function ensurePermission(handle, mode = "readwrite") {
+/** Check (and, when `ask` is true, request) permission on a handle.
+    requestPermission only works inside a user gesture, so background work
+    (autosave) must pass ask=false and surface "click to save" instead. */
+async function ensurePermission(handle, mode = "readwrite", ask = true) {
   if (!handle || !handle.queryPermission) return true;
   const opts = { mode };
   try {
     if ((await handle.queryPermission(opts)) === "granted") return true;
-    if ((await handle.requestPermission(opts)) === "granted") return true;
-  } catch (e) { /* ignore */ }
+    if (ask && (await handle.requestPermission(opts)) === "granted") return true;
+  } catch (e) { /* treated as not granted */ }
   return false;
 }
 async function writeFileHandle(fileHandle, contents) {
@@ -1739,16 +2135,17 @@ async function loadFromDir(dirHandle) {
   let fileHandle;
   try { fileHandle = await dirHandle.getFileHandle(FILE_NAME); }
   catch (e) { toast(`No ${FILE_NAME} in that folder. Use “Create a New Tree” to start one here.`, "err", 5200); return; }
-  let data;
-  try { data = normalizeLoaded(JSON.parse(await readFileHandle(fileHandle))); }
-  catch (e) { toast("That tree-data.json could not be read: " + e.message, "err", 5200); return; }
-  let photosDir = null; try { photosDir = await dirHandle.getDirectoryHandle(PHOTOS_DIR, { create: true }); } catch (e) { /* */ }
+  let parsed;
+  try { parsed = parseTreeFile(await readFileHandle(fileHandle)); }
+  catch (e) { toast(`${FILE_NAME} could not be opened: ${e.message}`, "err", 9000); return; }
+  const data = parsed.data;
+  let photosDir = null; try { photosDir = await dirHandle.getDirectoryHandle(PHOTOS_DIR, { create: true }); } catch (e) { /* read-only folder: photos just won't resolve */ }
   openTree(data, { dirHandle, fileHandle });
-  state.photosDirHandle = photosDir; state.usingFS = true;
-  setSavedNow();
+  state.photosDirHandle = photosDir;
   await pushRecent(dirHandle, data.treeName);
   refreshPhotoURLs();
   toast(`Loaded “${data.treeName}” — ${data.people.length} people.`, "ok");
+  reportRepairs(parsed.repairs);
 }
 
 async function newTreeFlow() {
@@ -1775,14 +2172,18 @@ async function newTreeFlow() {
     });
     if (choice === "open") { await loadFromDir(dirHandle); return; }
     if (choice !== "new") return;
+    // Replacing is destructive: keep the old tree as the backup first.
+    try { await writeFileHandle(await dirHandle.getFileHandle(BACKUP_NAME, { create: true }), await readFileHandle(existing)); }
+    catch (e) { toast(`Couldn't back up the existing tree (${e.message}) — nothing was replaced.`, "err", 7000); return; }
   }
   const data = emptyTree(dirHandle.name || "My Family Tree");
   const fileHandle = await dirHandle.getFileHandle(FILE_NAME, { create: true });
-  await writeFileHandle(fileHandle, serializeTree(data));
-  let photosDir = null; try { photosDir = await dirHandle.getDirectoryHandle(PHOTOS_DIR, { create: true }); } catch (e) { /* */ }
+  try { await writeFileHandle(fileHandle, serializeTree(data)); }
+  catch (e) { toast(`Couldn't create ${FILE_NAME} in that folder: ${e.message}`, "err", 7000); return; }
+  let photosDir = null; try { photosDir = await dirHandle.getDirectoryHandle(PHOTOS_DIR, { create: true }); } catch (e) { /* read-only folder: photos just won't resolve */ }
   openTree(data, { dirHandle, fileHandle });
-  state.photosDirHandle = photosDir; state.usingFS = true;
-  setSavedNow();
+  state.backupDone = true;             // the previous file (if any) is already in the backup
+  state.photosDirHandle = photosDir;
   await pushRecent(dirHandle, data.treeName);
   toast(`New tree created in “${dirHandle.name}”. Import a GEDCOM or add people.`, "ok", 5000);
 }
@@ -1800,46 +2201,101 @@ async function loadTreeFlow() {
   await loadFromDir(dirHandle);
 }
 
-function downloadJSON() {
-  if (!state.data) return;
-  const blob = new Blob([serializeTree(state.data)], { type: "application/json" });
+function downloadFile(text, filename, type) {
+  const blob = new Blob([text], { type });
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob); a.download = FILE_NAME;
+  a.href = URL.createObjectURL(blob); a.download = filename;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  markClean(); setSavedNow();
-  toast("Downloaded tree-data.json — keep it in your Family Tree folder.", "ok", 4200);
+}
+/** Download tree-data.json. Only counts as "saved" when there is no folder —
+    i.e. when downloading IS how this browser saves. A copy downloaded because
+    the folder write failed leaves the folder out of date, so stays unsaved. */
+function downloadJSON() {
+  if (!state.data) return;
+  const rev = state.rev;
+  downloadFile(serializeTree(state.data), FILE_NAME, "application/json");
+  if (!state.fileHandle) {
+    state._savedAt = new Date();
+    if (state.rev === rev) markClean();
+    toast("Downloaded tree-data.json — keep it in your Family Tree folder.", "ok", 4200);
+  } else toast("Downloaded a copy of tree-data.json.", "ok", 3000);
 }
 
-let _saving = false;
-async function saveFlow(silent = false) {
-  if (!state.data || _saving) return;
-  if (state.fileHandle) {
-    _saving = true;
+/* Copy the tree file as it was when this session started to
+   tree-data.backup.json, once per session, before the first overwrite. It
+   protects against a bad edit/import being autosaved over the only copy. */
+const BACKUP_NAME = "tree-data.backup.json";
+async function backupOnce() {
+  if (state.backupDone || !state.dirHandle || !state.fileHandle) return;
+  let prev = "";
+  try { prev = await readFileHandle(state.fileHandle); } catch (e) { /* nothing on disk yet */ }
+  if (prev.trim()) await writeFileHandle(await state.dirHandle.getFileHandle(BACKUP_NAME, { create: true }), prev);
+  state.backupDone = true;
+}
+
+/* Saves run one at a time. A save requested while one is writing sets
+   _saveAgain; the running save loops once more if anything changed, and every
+   caller awaits the same promise. `silent` = autosave: no toasts, no
+   permission prompt, no download fallback — failures show on the chip. */
+let _saveInFlight = null, _saveAgain = false, _saveAgainLoud = false;
+function saveFlow(silent = false) {
+  if (typeof silent !== "boolean") silent = false;   // called as a click handler → the arg is an Event
+  if (!state.data) return Promise.resolve();
+  if (!state.fileHandle) { if (!silent) downloadJSON(); return Promise.resolve(); }
+  if (_saveInFlight) { _saveAgain = true; _saveAgainLoud = _saveAgainLoud || !silent; return _saveInFlight; }
+  _saveInFlight = (async () => {
+    let loud = !silent;
     try {
-      if (!(await ensurePermission(state.fileHandle))) { toast("Permission denied — downloading a copy instead.", "warn"); downloadJSON(); return; }
-      await writeFileHandle(state.fileHandle, serializeTree(state.data));
-      setSavedNow();
-      if (!silent) toast("Saved.", "ok", 1500);
-    } catch (e) { toast("Save failed (" + e.message + ") — downloading a copy instead.", "err", 5200); downloadJSON(); }
-    finally { _saving = false; }
-  } else downloadJSON();
+      do {
+        _saveAgain = false; loud = loud || _saveAgainLoud; _saveAgainLoud = false;
+        const rev = state.rev;
+        if (!(await ensurePermission(state.fileHandle, "readwrite", loud)))
+          throw new Error(loud ? "Permission to write to the folder was refused." : "The browser needs your OK to write to the folder — click Save.");
+        try { await backupOnce(); }
+        catch (e) { state.backupDone = true; toast(`Couldn't write ${BACKUP_NAME} (${e.message}). Saving anyway.`, "warn", 5000); }
+        await writeFileHandle(state.fileHandle, serializeTree(state.data));
+        state._savedAt = new Date(); state.saveError = null; state.savedRev = rev;
+        if (state.rev === rev) markClean(); else updateSaveState();
+      } while (_saveAgain && state.rev !== state.savedRev);
+      if (loud) toast("Saved.", "ok", 1500);
+    } catch (e) {
+      state.saveError = (e && e.message ? e.message : String(e)).replace(/\.?$/, ".");
+      updateSaveState();
+      if (loud) {
+        const act = await modal({ title: "Couldn't save", body: `<p style="line-height:1.6">Writing <b>${FILE_NAME}</b> failed: ${U.escapeHtml(state.saveError)}</p><p style="line-height:1.6;color:var(--ink-soft)">Your changes are still here in the app. You can try again, or download a copy to keep them safe.</p>`,
+          actions: [{ label: "Close", value: null }, { label: "Download a copy", value: "dl" }, { label: "Try again", value: "retry", kind: "primary" }] });
+        if (act === "dl") downloadJSON();
+        if (act === "retry") setTimeout(() => saveFlow(false), 0);
+      }
+    } finally { _saveInFlight = null; }
+  })();
+  return _saveInFlight;
 }
 FT.saveFlow = saveFlow;
 
+/** After loading/creating: what's in memory is exactly what's on disk. */
 function setSavedNow() {
   state._savedAt = new Date();
-  state.dirty = false;
-  document.getElementById("app").classList.remove("dirty");
-  updateSaveState();
+  markClean();
 }
 
-// ---- Photo files (used by the Add Photo flow in the Views stage) ----
+// ---- Photo files ----
+/* A file name that's safe on every OS and not already used in photos/.
+   Sanitize FIRST (the numbered variants reuse base/ext), and only treat
+   NotFoundError as "free" — any other error must surface, not loop or lie. */
+const MAX_PHOTO_NAME_TRIES = 10000;    // tripwire: 10k same-named photos means something is wrong
 async function uniquePhotoName(name) {
-  if (!state.photosDirHandle) return name;
-  const dot = name.lastIndexOf("."), base = dot > 0 ? name.slice(0, dot) : name, ext = dot > 0 ? name.slice(dot) : "";
-  let cand = name.replace(/[\\/:*?"<>|]+/g, "_"), i = 1;
-  while (true) { try { await state.photosDirHandle.getFileHandle(cand); cand = `${base}-${i}${ext}`; i++; } catch (e) { return cand; } }
+  const clean = (name || "photo.jpg").replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "_").replace(/^\.+/, "_").slice(-120) || "photo.jpg";
+  if (!state.photosDirHandle) return clean;
+  const dot = clean.lastIndexOf("."), base = dot > 0 ? clean.slice(0, dot) : clean, ext = dot > 0 ? clean.slice(dot) : "";
+  let cand = clean;
+  for (let i = 1; i <= MAX_PHOTO_NAME_TRIES; i++) {
+    try { await state.photosDirHandle.getFileHandle(cand); }
+    catch (e) { if (e && e.name === "NotFoundError") return cand; throw e; }
+    cand = `${base}-${i}${ext}`;
+  }
+  throw new Error(`photos/ already has ${MAX_PHOTO_NAME_TRIES} files named like “${clean}”.`);
 }
 /** Save a File into photos/ (FS) or embed as data URL (fallback). Returns fields for a Photo. */
 async function savePhotoFile(file, desiredName) {
@@ -1849,8 +2305,8 @@ async function savePhotoFile(file, desiredName) {
     await writeFileHandle(fh, file);
     return { filename: name };
   }
-  const dataUrl = await new Promise((res) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(file); });
-  return { filename: file.name || "photo.jpg", dataUrl };
+  const dataUrl = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => rej(fr.error || new Error("could not read the image")); fr.readAsDataURL(file); });
+  return { filename: await uniquePhotoName(file.name), dataUrl };
 }
 FT.savePhotoFile = savePhotoFile;
 
@@ -1872,7 +2328,8 @@ FT.photoURL = photoURL;
 async function refreshPhotoURLs() {
   if (!state.data) return;
   let resolved = 0;
-  for (const ph of state.data.photos) { ph._url = null; if (await photoURL(ph)) resolved++; }
+  revokePhotoURLs(state.data);          // free the old blob: URLs before re-resolving
+  for (const ph of state.data.photos) { if (await photoURL(ph)) resolved++; }
   if (typeof FT.onPhotosRefreshed === "function") FT.onPhotosRefreshed();
   return resolved;
 }
@@ -1882,12 +2339,17 @@ function revokePhotoURLs(data) {
   for (const ph of data.photos) { if (ph._url) { try { URL.revokeObjectURL(ph._url); } catch (e) {} ph._url = null; } }
 }
 
-// ---- Wire the real save/load buttons (replacing the Stage-1 stubs) ----
+// ---- Wire the save/load buttons ----
 document.getElementById("btnNewTree").addEventListener("click", newTreeFlow);
 document.getElementById("btnLoadTree").addEventListener("click", loadTreeFlow);
-document.getElementById("btnSave").addEventListener("click", saveFlow);
+document.getElementById("btnSave").addEventListener("click", () => saveFlow(false));
 window.addEventListener("keydown", (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); if (state.data) saveFlow(); }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+    e.preventDefault(); if (!state.data) return;
+    // Fields commit on "change", which fires on blur — commit the one being typed in first.
+    const a = document.activeElement; if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) a.blur();
+    saveFlow(false);
+  }
 });
 renderRecent();
 
@@ -1991,9 +2453,12 @@ function nodeEl(p, { sel, focus, add } = {}) {
     + (isHome ? " home" : "") + (cd.showPhoto ? "" : " nophoto");
   el.dataset.id = p.id;
   el.style.width = CARD_W + "px";
+  el.tabIndex = 0; el.setAttribute("role", "button");
+  const life = lifespan(p);
+  el.setAttribute("aria-label", S().displayName(p) + (life ? ", " + life : "") + (p.death ? ", deceased" : "") + (focus ? ", in focus" : "") + (isHome ? ", you" : ""));
   const name = U.escapeHtml(S().displayName(p));
   const l1 = cardField(p, cd.line1), l2 = cardField(p, cd.line2);
-  const av = cd.showPhoto ? `<div class="av" data-person="${p.id}">${U.escapeHtml(personInitials(p))}</div>` : "";
+  const av = cd.showPhoto ? `<div class="av" data-person="${U.escapeHtml(p.id)}">${U.escapeHtml(personInitials(p))}</div>` : "";
   el.innerHTML = av +
     `<div class="meta"><div class="nm">${name}</div>` +
     `${l1 ? `<div class="dt">${U.escapeHtml(l1)}</div>` : ""}` +
@@ -2001,8 +2466,8 @@ function nodeEl(p, { sel, focus, add } = {}) {
     `</div>` +
     (p.death ? `<span class="dead-badge" title="Deceased">†</span>` : "") +
     (isHome ? `<span class="home-badge" title="This is you">★</span>` : "") +
-    (add ? `<button class="node-fam" title="Show this person’s immediate family">👪</button>` +
-           `<button class="node-add" title="Add a relative">＋</button>` : "");
+    (add ? `<button class="node-fam" tabindex="-1" title="Show this person’s immediate family" aria-label="Immediate family">👪</button>` +
+           `<button class="node-add" tabindex="-1" title="Add a relative" aria-label="Add a relative">＋</button>` : "");
   return el;
 }
 
@@ -2021,7 +2486,8 @@ function ensureViewRoot() {
 }
 V.getFocus = () => state.focusId || homePersonId() || state.selectedId || (state.data.people[0] && state.data.people[0].id) || null;
 
-render = function render() {                    // override the Stage-1 stub
+/* Central re-render entry point: redraws the active view from state. */
+function render() {
   if (!state.store) return;
   const view = state.currentView;
   document.querySelectorAll(".viewbar .tab").forEach(t => t.classList.toggle("active", t.dataset.view === view));
@@ -2031,14 +2497,14 @@ render = function render() {                    // override the Stage-1 stub
   const stageEmpty = document.getElementById("stageEmpty");
   stageEmpty.style.display = showEmpty ? "flex" : "none";
   vr.style.display = showEmpty ? "none" : "block";     // don't let the empty viewRoot swallow clicks
-  if (empty) { const dev = document.getElementById("devStats"); if (dev) dev.innerHTML = ""; }
   vr.innerHTML = "";
+  vr.classList.toggle("canvas-view", view === "family" || view === "pedigree");
   V.activeCanvas = null;                               // set again by the canvas views below
   if (view === "family") V.renderFamily(vr);
   else if (view === "pedigree") V.renderPedigree(vr);
   else if (view === "list") V.renderList(vr);
   else if (view === "timeline") V.renderTimeline(vr);
-};
+}
 FT.render = render;
 
 /* ---------------------------------------------------------------------------
@@ -2061,15 +2527,38 @@ function computeHourglass(focusId, genUp, genDown) {
   const rootGen = hasParents ? -1 : 0;
   const downDepth = hasParents ? genDown + 1 : genDown;
 
+  /* Every person appears on the canvas at most once. `seen` is claimed when a
+     person is built — as a node OR as someone's partner — so a person married
+     twice can't be drawn beside both spouses (that used to drop the second
+     couple on top of another card when relatives married relatives). */
   function buildDown(id, depth, forced) {
     seen.add(id);
     let partnerId = null, marriage = null;
     if (forced !== undefined) { partnerId = forced; marriage = forced ? store.findMarriage(id, forced) : null; }
-    else { const parts = store.partners(id); if (parts[0]) { partnerId = parts[0].person.id; marriage = parts[0].marriage; } }
+    else { const pt = store.partners(id).find(x => !seen.has(x.person.id)); if (pt) { partnerId = pt.person.id; marriage = pt.marriage; } }
     if (partnerId) seen.add(partnerId);
     const children = [];
-    if (depth > 0) for (const c of store.children(id)) if (!seen.has(c.id)) children.push(buildDown(c.id, depth - 1));
-    return { id, partnerId, marriage, children, gen: 0, x: 0, sub: 0 };
+    if (depth > 0) {
+      // The couple's children, plus each partner's children from other
+      // relationships (half-siblings). `via` records whose child it is so the
+      // connector starts at the right card; one parent's own children sit on
+      // that parent's side of the couple.
+      const kids = new Map();
+      for (const c of store.children(id)) kids.set(c.id, c);
+      if (partnerId) for (const c of store.children(partnerId)) kids.set(c.id, c);
+      const via = (c) => (partnerId && c.parentIds.includes(id) && c.parentIds.includes(partnerId)) ? "both" : c.parentIds.includes(id) ? id : partnerId;
+      let ordered = [...kids.values()];
+      if (partnerId) {
+        const leftId = orderCouple(id, partnerId)[0];
+        const rank = (c) => { const v = via(c); return v === "both" ? 1 : v === leftId ? 0 : 2; };
+        ordered = ordered.map((c, i) => ({ c, i, r: rank(c) })).sort((a, b) => a.r - b.r || a.i - b.i).map(x => x.c);
+      }
+      for (const c of ordered) {
+        if (seen.has(c.id)) continue;
+        const node = buildDown(c.id, depth - 1); node.via = via(c); children.push(node);
+      }
+    }
+    return { id, partnerId, marriage, children, gen: 0, x: 0, sub: 0, via: "both" };
   }
   const effW = (n) => n.partnerId ? (2 * CARD_W + COUPLE_GAP) : CARD_W;
   function measure(n) {
@@ -2077,16 +2566,22 @@ function computeHourglass(focusId, genUp, genDown) {
     let sum = 0; n.children.forEach((c, i) => sum += measure(c) + (i ? GAP_X : 0));
     n.sub = Math.max(effW(n), sum); return n.sub;
   }
+  /* Each subtree owns the horizontal band [left, left + sub). Children are laid
+     side by side inside it; the parent is centred over its first and last
+     child *cards* and clamped inside its own band, so siblings' bands never
+     overlap. (Centring on child.x + child.sub/2 — card position plus half the
+     SUBTREE width — pushed parents onto their neighbours whenever a child's
+     descendants were wider than the child.) */
   function place(n, left, gen) {
     n.gen = gen;
-    if (!n.children.length) { n.x = left + (n.sub - effW(n)) / 2; }
-    else {
-      let cw = 0; n.children.forEach((c, i) => cw += c.sub + (i ? GAP_X : 0));
-      let cx = left + (n.sub - cw) / 2;
-      for (const c of n.children) { place(c, cx, gen + 1); cx += c.sub + GAP_X; }
-      const f = n.children[0], l = n.children[n.children.length - 1];
-      n.x = (f.x + f.sub / 2 + l.x + l.sub / 2) / 2 - effW(n) / 2;
-    }
+    const w = effW(n);
+    if (!n.children.length) { n.x = left + (n.sub - w) / 2; return; }
+    let cw = 0; n.children.forEach((c, i) => cw += c.sub + (i ? GAP_X : 0));
+    let cx = left + (n.sub - cw) / 2;
+    for (const c of n.children) { place(c, cx, gen + 1); cx += c.sub + GAP_X; }
+    const f = n.children[0], l = n.children[n.children.length - 1];
+    const centre = (f.x + effW(f) / 2 + l.x + effW(l) / 2) / 2;
+    n.x = Math.min(Math.max(centre - w / 2, left), left + n.sub - w);
   }
   const downRoot = buildDown(rootId, downDepth, forcedPartner);
   measure(downRoot); place(downRoot, 0, rootGen);
@@ -2102,16 +2597,22 @@ function computeHourglass(focusId, genUp, genDown) {
     return [aId, bId];                       // same/unknown sex: keep insertion order
   }
   function collectDown(n) {
+    if (placed.has(n.id)) { console.error(`[layout] ${n.id} was about to be placed twice — skipped. Please report this with your tree.`); return; }
     const partnerId = (n.partnerId && store.person(n.partnerId) && !placed.has(n.partnerId)) ? n.partnerId : null;
     if (partnerId) {
       const [leftId, rightId] = orderCouple(n.id, partnerId);
       placed.set(leftId, { x: n.x, gen: n.gen, partnerId: rightId, marriage: n.marriage });
       placed.set(rightId, { x: n.x + CARD_W + COUPLE_GAP, gen: n.gen, partnerId: leftId, marriage: n.marriage, satellite: true });
       spouseEdges.push({ aId: leftId, divorced: n.marriage && n.marriage.divorced });
-    } else if (!placed.has(n.id)) {
+    } else {
       placed.set(n.id, { x: n.x, gen: n.gen, partnerId: n.partnerId, marriage: n.marriage });
     }
-    for (const c of n.children) { pcEdges.push({ pMidX: midXof(n), pGen: n.gen, cMidX: c.x + CARD_W / 2, cGen: c.gen }); collectDown(c); }
+    for (const c of n.children) {
+      // A child of only one partner hangs from that parent's card, not the couple's midpoint.
+      const one = c.via !== "both" && placed.get(c.via);
+      const pMidX = one ? one.x + CARD_W / 2 : midXof(n);
+      pcEdges.push({ pMidX, pGen: n.gen, cMidX: c.x + CARD_W / 2, cGen: c.gen }); collectDown(c);
+    }
   }
   collectDown(downRoot);
 
@@ -2138,7 +2639,7 @@ function computeHourglass(focusId, genUp, genDown) {
     let cx = left + (n.sub - cw) / 2;
     for (const c of kids) { placeUp(c, cx, gen - 1); cx += c.sub + GAP_X; }
     const f = kids[0], l = kids[kids.length - 1];
-    n.x = (f.x + upW(f) / 2 + l.x + upW(l) / 2) / 2 - w / 2;
+    n.x = Math.min(Math.max((f.x + upW(f) / 2 + l.x + upW(l) / 2) / 2 - w / 2, left), left + n.sub - w);   // same band rule as place()
   }
   if (hasParents) {
     const tops = [];   // grandparent subtrees tagged with which parent they sit above
@@ -2177,7 +2678,10 @@ function computeHourglass(focusId, genUp, genDown) {
     for (const [ancId, ancV] of ancestors) {
       for (const child of store.children(ancId)) {
         if (seen.has(child.id)) continue;              // already on the direct line
-        const sub = buildDown(child.id, Math.max(1, genDown));
+        // Descend to one generation below the focus (e.g. uncle → cousin →
+        // cousin's child) but no further: deeper collateral lines only widen the
+        // canvas with people several steps removed.
+        const sub = buildDown(child.id, Math.max(1, Math.min(genDown, -ancV.gen)));
         measure(sub); place(sub, 0, ancV.gen + 1);
         const s = span(sub, { minG: Infinity, maxG: -Infinity, minX: Infinity, maxX: -Infinity });
         let occMin = Infinity, occMax = -Infinity;
@@ -2206,12 +2710,22 @@ function computeHourglass(focusId, genUp, genDown) {
     minX = Math.min(minX, v.x); maxX = Math.max(maxX, v.x + CARD_W);
     minGen = Math.min(minGen, v.gen); maxGen = Math.max(maxGen, v.gen);
   }
+  // Tripwire: cards in one row must never overlap. Cheap (sort per row), and a
+  // layout bug is reported loudly instead of silently hiding a person.
+  {
+    const rows = new Map();
+    for (const [id, v] of placed) { const r = rows.get(v.gen); if (r) r.push([v.x, id]); else rows.set(v.gen, [[v.x, id]]); }
+    const clash = [];
+    for (const [gen, r] of rows) { r.sort((a, b) => a[0] - b[0]); for (let i = 1; i < r.length; i++) if (r[i][0] < r[i - 1][0] + CARD_W - 0.5) clash.push(`gen ${gen}: ${r[i - 1][1]} / ${r[i][1]}`); }
+    if (clash.length) console.error(`[layout] ${clash.length} overlapping card pair(s) around ${focusId}: ${clash.slice(0, 5).join("; ")}${clash.length > 5 ? " …" : ""}`);
+  }
   const padX = 60, padY = 40, offX = padX - minX, offGen = -minGen;
   for (const [, v] of placed) { v.px = v.x + offX; v.py = (v.gen + offGen) * ROW_H + padY; }
   const W = (maxX - minX) + padX * 2, H = (maxGen - minGen + 1) * ROW_H + padY * 2 - (ROW_H - CARD_H);
   return { placed, pcEdges, spouseEdges, W, H, focusId, offX,
     yOf: (gen) => (gen + offGen) * ROW_H + padY };
 }
+V.computeHourglass = computeHourglass;
 
 /* ---------------------------------------------------------------------------
    Family (hourglass) view
@@ -2321,7 +2835,7 @@ V.renderPedigree = function (vr) {
     canvas.appendChild(el);
     if (v.hasParents) {                                 // collapse/expand toggle
       const t = document.createElement("button");
-      t.className = "btn sm"; t.textContent = v.open ? "–" : "＋";
+      t.className = "btn sm ped-toggle"; t.textContent = v.open ? "–" : "＋";
       t.title = v.open ? "Collapse ancestors" : "Expand ancestors";
       t.style.cssText = `position:absolute;left:${v.x + CARD_W - 2}px;top:${v.y + CARD_H / 2 - 13}px;width:24px;height:24px;padding:0;border-radius:50%;z-index:2`;
       t.addEventListener("click", (ev) => { ev.stopPropagation(); if (V.collapsed.has(id)) V.collapsed.delete(id); else V.collapsed.add(id); render(); });
@@ -2415,6 +2929,27 @@ function zoomAround(view, canvas, f, pivot) {
   cam.s = s2;
   V.cam[view] = cam; applyCamTransform(canvas, cam);
 }
+/* Does a press on `target` belong to the canvas (pan / tap a card), or to a
+   control that handles its own click? Anything interactive that isn't a card's
+   own ＋/👪 button must be left alone: the canvas takes pointer capture on
+   press, and captured pointers never deliver `click` to the original target.
+   (That is exactly how the collapsed 🎂 button once became unclickable.) */
+V.canvasClaimsPointer = function (target) {
+  if (!target || !target.closest) return false;
+  if (target.closest(".controls, .upcoming, .upcoming-pill")) return false;
+  const ctl = target.closest("button, select, input, textarea, a, label");
+  if (ctl && !ctl.matches(".node-add, .node-fam")) return false;
+  return true;
+};
+/* Wheel zoom is proportional to the scroll distance, so a mouse notch
+   (deltaY ≈ 100 px) zooms 12% — the step users already approved — while a
+   trackpad's many small deltas add up to the same total instead of racing.
+   ln(1.12)/100 ≈ 0.001133. Clamped per event against huge deltas. */
+const WHEEL_ZOOM_PER_PX = Math.log(1.12) / 100;
+function wheelFactor(e) {
+  const px = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);   // lines / pages → px
+  return Math.min(1.5, Math.max(1 / 1.5, Math.exp(-px * WHEEL_ZOOM_PER_PX)));
+}
 /* Canvas interactions are bound ONCE to #viewRoot (which is reused across renders);
    the live canvas + view are read from V.activeCanvas / V.activeView each time.
    Binding per-render would stack duplicate listeners and make zoom/pan jitter. */
@@ -2422,47 +2957,71 @@ function attachCanvasInteractions(vr, canvas, view) {
   V.activeCanvas = canvas; V.activeView = view;
   if (vr.__interactionsBound) return;
   vr.__interactionsBound = true;
-  const stage = document.getElementById("stage");
   // Cards are fixed: pressing anywhere (empty space OR a card) pans the canvas.
-  // A press-and-release without movement selects the card, or opens the "+" add menu.
-  let panning = false, startX = 0, startY = 0, cam0 = null, downNodeId = null, downAddId = null, downFamId = null, moved = false;
-  const THRESH = 4;
+  // A press-and-release without movement opens the card, or its ＋ / 👪 button.
+  // Two pointers (touch screens) pinch-zoom around their midpoint.
+  const THRESH = 4;                                     // px of travel before a press counts as a drag
+  const pointers = new Map();                           // pointerId -> {x, y}
+  let cam0 = null, start = null, pinch0 = null, moved = false, down = null;
+  const mid = () => { const [a, b] = [...pointers.values()]; return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, d: Math.hypot(a.x - b.x, a.y - b.y) || 1 }; };
+  const reset = () => { pointers.clear(); down = null; pinch0 = null; start = null; };
   vr.addEventListener("pointerdown", (e) => {
     const canvas = V.activeCanvas, view = V.activeView; if (!canvas) return;
-    if (e.button !== 0) return;
-    if (e.target.closest(".controls") || e.target.closest(".upcoming")) return;   // let overlay controls handle their own clicks
-    const nodeHit = e.target.closest(".node");
-    const inCanvas = nodeHit && canvas.contains(nodeHit);
-    const cam = V.cam[view] || { s: 1, x: 0, y: 0 };
-    startX = e.clientX; startY = e.clientY; cam0 = { ...cam }; moved = false; panning = true;
-    downAddId = (inCanvas && e.target.closest(".node-add")) ? nodeHit.dataset.id : null;
-    downFamId = (inCanvas && e.target.closest(".node-fam")) ? nodeHit.dataset.id : null;
-    downNodeId = inCanvas ? nodeHit.dataset.id : null;
-    vr.setPointerCapture(e.pointerId);
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    if (!V.canvasClaimsPointer(e.target)) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    try { vr.setPointerCapture(e.pointerId); } catch (err) { /* synthetic events have no active pointer */ }
+    cam0 = { ...(V.cam[view] || { s: 1, x: 0, y: 0 }) };
+    if (pointers.size === 1) {
+      start = { x: e.clientX, y: e.clientY }; moved = false;
+      const nodeHit = e.target.closest(".node"), inCanvas = nodeHit && canvas.contains(nodeHit);
+      down = !inCanvas ? null : { id: nodeHit.dataset.id,
+        kind: e.target.closest(".node-add") ? "add" : e.target.closest(".node-fam") ? "fam" : "card" };
+    } else if (pointers.size === 2) { pinch0 = mid(); moved = true; down = null; }   // a pinch is never a tap
   });
   vr.addEventListener("pointermove", (e) => {
-    if (!panning) return;
+    if (!pointers.has(e.pointerId)) return;
     const canvas = V.activeCanvas, view = V.activeView; if (!canvas) return;
-    const dx = e.clientX - startX, dy = e.clientY - startY;
-    if (Math.abs(dx) + Math.abs(dy) > THRESH) moved = true;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     const cam = V.cam[view]; if (!cam) return;
-    cam.x = cam0.x + dx; cam.y = cam0.y + dy; applyCamTransform(canvas, cam);
+    if (pointers.size >= 2 && pinch0) {
+      const m = mid(), s2 = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, cam0.s * m.d / pinch0.d)), r = s2 / cam0.s;
+      cam.s = s2; cam.x = m.x - (pinch0.x - cam0.x) * r; cam.y = m.y - (pinch0.y - cam0.y) * r;
+    } else if (start) {
+      const dx = e.clientX - start.x, dy = e.clientY - start.y;
+      if (Math.abs(dx) + Math.abs(dy) > THRESH) moved = true;
+      cam.x = cam0.x + dx; cam.y = cam0.y + dy;
+    }
+    applyCamTransform(canvas, cam);
   });
-  vr.addEventListener("pointerup", () => {
-    if (!panning) return;
-    const canvas = V.activeCanvas, view = V.activeView;
-    if (!moved && downAddId) {
-      const badge = canvas && canvas.querySelector(`.node[data-id="${CSS.escape(downAddId)}"] .node-add`);
-      openAddRelativeMenu(downAddId, badge);              // "+" button = add a relative
-    } else if (!moved && downFamId) openFamilyGroup(downFamId);        // 👪 button = immediate family
-    else if (!moved && downNodeId) onNodeClick(downNodeId, view);      // card body = open details
-    panning = false; downNodeId = null; downAddId = null; downFamId = null;
-  });
+  const end = (e) => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.delete(e.pointerId);
+    if (pointers.size === 1) {                          // lifted one finger of a pinch: continue as a pan
+      const [p] = pointers.values(); start = { x: p.x, y: p.y }; cam0 = { ...(V.cam[V.activeView] || cam0) }; pinch0 = null; return;
+    }
+    if (pointers.size) return;
+    const hit = !moved && down;
+    reset();
+    if (!hit || e.type === "pointercancel") return;
+    const canvas = V.activeCanvas;
+    if (hit.kind === "add") openAddRelativeMenu(hit.id, canvas && canvas.querySelector(`.node[data-id="${CSS.escape(hit.id)}"] .node-add`));
+    else if (hit.kind === "fam") openFamilyGroup(hit.id);
+    else onNodeClick(hit.id, V.activeView);
+  };
+  vr.addEventListener("pointerup", end);
+  vr.addEventListener("pointercancel", end);
   vr.addEventListener("wheel", (e) => {
     const canvas = V.activeCanvas, view = V.activeView; if (!canvas) return;
     e.preventDefault();
-    zoomAround(view, canvas, e.deltaY < 0 ? 1.12 : 1 / 1.12, null);   // centred on the selected person
+    zoomAround(view, canvas, wheelFactor(e), null);   // centred on the person in focus
   }, { passive: false });
+  // Keyboard: cards are focusable buttons — Enter/Space opens one.
+  vr.addEventListener("keydown", (e) => {
+    const node = e.target.closest && e.target.closest(".node");
+    if (!node || e.target !== node || (e.key !== "Enter" && e.key !== " ")) return;
+    e.preventDefault(); onNodeClick(node.dataset.id, V.activeView);
+  });
 }
 /* Clicking a card opens that person's details. It deliberately does NOT change
    which person the tree is built around — use the panel's Focus button for that,
@@ -2471,7 +3030,11 @@ function onNodeClick(id, view) {
   state.selectedId = id;
   render();
   openPanel(id);
+  // render() rebuilt the cards; put keyboard focus back on the one just opened.
+  const n = document.querySelector(`#viewRoot .node[data-id="${CSS.escape(id)}"]`);
+  if (n && document.activeElement === document.body) n.focus({ preventScroll: true });
 }
+V.onNodeClick = onNodeClick;
 V.focusOn = function (id) {
   state.selectedId = id; state.focusId = id;
   if (state.currentView === "list" || state.currentView === "timeline") state.currentView = "family";
@@ -2516,7 +3079,7 @@ V.renderList = function (vr) {
     const tr = document.createElement("tr");
     const nkids = store.children(p.id).length, nsp = store.partners(p.id).length;
     tr.innerHTML =
-      `<td class="nm"><span class="av" data-person="${p.id}">${U.escapeHtml(personInitials(p))}</span>${U.escapeHtml(store.fullName(p))}</td>` +
+      `<td class="nm"><span class="av" data-person="${U.escapeHtml(p.id)}">${U.escapeHtml(personInitials(p))}</span>${U.escapeHtml(store.fullName(p))}</td>` +
       `<td>${U.escapeHtml(p.birth && p.birth.date ? U.formatDate(p.birth.date) : "")}${p.birth && p.birth.place ? `<br><small style="color:var(--ink-soft)">${U.escapeHtml(p.birth.place)}</small>` : ""}</td>` +
       `<td>${p.death && p.death.date ? U.escapeHtml(U.formatDate(p.death.date)) : (p.death ? "deceased" : "")}</td>` +
       `<td>${U.escapeHtml(p.occupation || "")}</td>` +
@@ -2555,7 +3118,7 @@ V.renderTimeline = function (vr) {
     const dec = Math.floor(ev.y / 10) * 10;
     if (dec !== lastDecade) { const h = document.createElement("div"); h.className = "tl-decade"; h.textContent = dec + "s"; wrap.appendChild(h); lastDecade = dec; }
     const it = document.createElement("div"); it.className = "tl-item " + ev.kind;
-    const whoHtml = ev.who.map(id => `<span class="who" data-id="${id}">${U.escapeHtml(store.displayName(id))}</span>`).join(" & ");
+    const whoHtml = ev.who.map(id => `<span class="who" data-id="${U.escapeHtml(id)}">${U.escapeHtml(store.displayName(id))}</span>`).join(" & ");
     const verb = ev.kind === "birth" ? "born" : ev.kind === "death" ? "died" : "married";
     it.innerHTML = `<div class="tl-year">${ev.y}</div><div class="tl-desc"><div class="tl-kind">${verb}</div>${whoHtml}${ev.place ? ` · <span style="color:var(--ink-soft)">${U.escapeHtml(ev.place)}</span>` : ""}</div>`;
     it.querySelectorAll(".who").forEach(w => w.onclick = () => V.focusOn(w.dataset.id));
@@ -2573,7 +3136,9 @@ function matchPerson(p, q) {
     (p.alternateNames || []).some(n => n.toLowerCase().includes(q)) ||
     (p.occupation || "").toLowerCase().includes(q);
 }
+const LIST_FILTER_DEBOUNCE_MS = 150;
 function wireSearch() {
+  let listTimer = null;
   const input = document.getElementById("searchInput");
   const box = document.getElementById("searchResults");
   let hl = -1, matches = [];
@@ -2581,12 +3146,14 @@ function wireSearch() {
   input.addEventListener("input", () => {
     const q = input.value.trim().toLowerCase();
     state._search = input.value.trim();
-    if (state.currentView === "list") { render(); }
+    // Re-filter the List view once typing pauses: a full List render is ~127 ms at
+    // 5,000 people (tests/bench.html), longer than the gap between keystrokes.
+    if (state.currentView === "list") { clearTimeout(listTimer); listTimer = setTimeout(render, LIST_FILTER_DEBOUNCE_MS); }
     if (!q) { close(); return; }
     matches = state.store.people().filter(p => matchPerson(p, q)).slice(0, 12);
     if (!matches.length) { box.innerHTML = `<div class="sr"><small>No matches</small></div>`; box.classList.remove("hidden"); return; }
     box.innerHTML = matches.map((p, i) =>
-      `<div class="sr${i === hl ? " hl" : ""}" data-id="${p.id}"><span class="av" data-person="${p.id}" style="width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:#efe7d8;font-size:11px">${U.escapeHtml(personInitials(p))}</span> ${U.escapeHtml(state.store.fullName(p))} <small>${U.escapeHtml(lifespan(p))}</small></div>`).join("");
+      `<div class="sr${i === hl ? " hl" : ""}" data-id="${U.escapeHtml(p.id)}"><span class="av" data-person="${U.escapeHtml(p.id)}" style="width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:#efe7d8;font-size:11px">${U.escapeHtml(personInitials(p))}</span> ${U.escapeHtml(state.store.fullName(p))} <small>${U.escapeHtml(lifespan(p))}</small></div>`).join("");
     box.classList.remove("hidden");
     // Select on pointerdown + preventDefault so the input never blurs (which would
     // hide the box before a click lands). This makes mouse selection reliable.
@@ -2652,7 +3219,7 @@ function dateField(label, gdate, onChange) {
 }
 function relRow(person, { role, onRemove } = {}) {
   const row = document.createElement("div"); row.className = "rel-row";
-  row.innerHTML = `<span class="av" data-person="${person.id}">${U.escapeHtml(personInitials(person))}</span>
+  row.innerHTML = `<span class="av" data-person="${U.escapeHtml(person.id)}">${U.escapeHtml(personInitials(person))}</span>
     <span class="rn">${U.escapeHtml(S().displayName(person))} <small>${U.escapeHtml(lifespan(person))}${role ? " · " + role : ""}</small></span>`;
   row.querySelector(".rn").onclick = () => { state.selectedId = person.id; render(); openPanel(person.id); };   // browse without re-rooting the tree
   if (onRemove) { const x = document.createElement("span"); x.className = "x"; x.textContent = "✕"; x.title = "Remove link"; x.onclick = onRemove; row.appendChild(x); }
@@ -2685,7 +3252,7 @@ function renderPanel() {
 
   // hero — the avatar is clickable to add/change the profile photo
   const hero = document.createElement("div"); hero.className = "hero";
-  hero.innerHTML = `<div class="av addable" data-person="${p.id}" title="Click to add a photo">${U.escapeHtml(personInitials(p))}</div>
+  hero.innerHTML = `<div class="av addable" data-person="${U.escapeHtml(p.id)}" title="Click to add a photo">${U.escapeHtml(personInitials(p))}</div>
     <div class="who"><div class="n">${U.escapeHtml(store.displayName(p))}</div><div class="s">${U.escapeHtml(lifespan(p) || "—")}</div></div>`;
   hero.querySelector(".av").onclick = () => addPhotoTo(p.id);
   sb.appendChild(hero);
@@ -2748,7 +3315,11 @@ function renderPanel() {
     d.title = ph.caption || ph.filename;
     if (ph.id === p.primaryPhotoId) { const st = document.createElement("span"); st.className = "star"; st.textContent = "★"; d.appendChild(st); }
     d.innerHTML += ph.pending ? `<span>⚠︎ add file</span>` : `<span>${U.escapeHtml(ph.filename || "photo")}</span>`;
-    FT.photoURL(ph).then(url => { if (url) d.innerHTML = (ph.id === p.primaryPhotoId ? `<span class="star">★</span>` : "") + `<img src="${url}" alt="">`; });
+    FT.photoURL(ph).then(url => {
+      if (!url) return;
+      d.innerHTML = ph.id === p.primaryPhotoId ? `<span class="star">★</span>` : "";
+      const img = document.createElement("img"); img.alt = ""; img.src = url; d.appendChild(img);   // src via DOM, never via HTML
+    });
     d.onclick = () => openPhotoModal(ph.id, p.id);
     strip.appendChild(d);
   }
@@ -2963,8 +3534,9 @@ async function removePartnerFlow(aId, bId) {
              <p style="line-height:1.6;color:var(--ink-soft)">Nobody is deleted — only the parent link is removed.</p>`,
       actions: [{ label: "Cancel", value: null }]
         .concat(marriage ? [{ label: "Just end the marriage", value: "marriage" }] : [])
-        .concat([{ label: `${bName} isn’t the parent`, value: "dropB", kind: "danger" },
-                 { label: `${aName} isn’t the parent`, value: "dropA", kind: "danger" }])
+        // button labels are set with textContent, so they take the raw (unescaped) names
+        .concat([{ label: `${store.displayName(b)} isn’t the parent`, value: "dropB", kind: "danger" },
+                 { label: `${store.displayName(a)} isn’t the parent`, value: "dropA", kind: "danger" }])
     });
   } else choice = "marriage";
 
@@ -3012,7 +3584,8 @@ async function deletePersonFlow(id) {
 /* ---------------------------------------------------------------------------
    Add Photo + photo tagging
    ------------------------------------------------------------------------- */
-let _photoTargetPerson = null;
+let _photoTargetPerson = null;   // who the next picked photo file is for
+let _photoReplaceId = null;      // set when the next picked file replaces a pending (GEDCOM) photo
 function addPhotoTo(personId) { _photoTargetPerson = personId; document.getElementById("filePhoto").click(); }
 document.getElementById("filePhoto").addEventListener("change", async (e) => {
   const files = [...e.target.files]; e.target.value = "";
@@ -3061,7 +3634,10 @@ async function openPhotoModal(photoId, contextPersonId) {
   if (url) { const img = document.createElement("img"); img.src = url; stagewrap.appendChild(img); }
   else { stagewrap.style.cssText = "background:#2b2620;color:#fff;padding:30px;text-align:center;border-radius:10px"; stagewrap.textContent = ph.pending ? "Image file not found. Use “Replace file” to attach it from your computer." : "No image."; }
   const side2 = document.createElement("div"); side2.className = "side2";
-  side2.innerHTML = `<div class="field"><label>Caption</label><input id="pcap" value="${U.escapeHtml(ph.caption || "")}"></div><div class="sec-title" style="margin-top:6px">Tagged people</div>`;
+  side2.innerHTML = `<div class="field"><label>Caption</label><input class="pcap"></div><div class="sec-title" style="margin-top:6px">Tagged people</div>`;
+  // Keep a reference: once the dialog closes its DOM is gone, so looking the
+  // input up by id afterwards (as this once did) always found nothing.
+  const capInput = side2.querySelector(".pcap"); capInput.value = ph.caption || "";
   const tagList = document.createElement("div"); side2.appendChild(tagList);
   function drawTags() {
     stagewrap.querySelectorAll(".tagbox").forEach(b => b.remove());
@@ -3109,13 +3685,13 @@ async function openPhotoModal(photoId, contextPersonId) {
   const addTagBtn = { label: "＋ Tag person", value: "tag" };
   actions.splice(actions.length - 1, 0, addTagBtn);
   const choice = await modal({ title: "Photo", body, actions });
-  const capVal = document.getElementById("pcap"); if (capVal) store.updatePhoto(ph.id, { caption: capVal.value });
+  if (capInput.value !== (ph.caption || "")) { state.pendingLabel = "Edit photo caption"; store.updatePhoto(ph.id, { caption: capInput.value }); }
   if (choice === "del") { store.removePhoto(ph.id); toast("Photo removed."); }
   else if (choice === "replace") { _photoReplaceId = ph.id; _photoTargetPerson = contextPersonId; document.getElementById("filePhoto").click(); }
   else if (choice === "tag") { const who = await pickPerson({ title: "Tag a person", exclude: new Set(ph.tags.map(t => t.personId)) }); if (who) store.tagPerson(ph.id, who); }
   renderPanel(); render();
 }
-let _photoReplaceId = null;
+FT.openPhotoModal = openPhotoModal;
 
 /* ---------------------------------------------------------------------------
    Family group view (person with parents, spouse(s), children)
@@ -3125,7 +3701,7 @@ async function openFamilyGroup(id) {
   const grp = (title, people, roleFn) => {
     if (!people.length) return "";
     return `<div class="sec-title" style="margin-top:12px">${title}</div>` + people.map(x =>
-      `<div class="rel-row"><span class="av">${U.escapeHtml(personInitials(x))}</span><span class="rn" data-id="${x.id}">${U.escapeHtml(store.fullName(x))} <small>${U.escapeHtml(lifespan(x))}${roleFn ? " · " + roleFn(x) : ""}</small></span></div>`).join("");
+      `<div class="rel-row"><span class="av">${U.escapeHtml(personInitials(x))}</span><span class="rn" data-id="${U.escapeHtml(x.id)}">${U.escapeHtml(store.fullName(x))} <small>${U.escapeHtml(lifespan(x))}${roleFn ? " · " + roleFn(x) : ""}</small></span></div>`).join("");
   };
   const body = document.createElement("div");
   body.innerHTML =
@@ -3134,8 +3710,7 @@ async function openFamilyGroup(id) {
     grp("Siblings", store.siblings(id)) +
     grp("Spouses / partners", store.partners(id).map(s => s.person), null) +
     grp("Children", store.children(id));
-  body.querySelectorAll(".rn[data-id]").forEach(n => n.onclick = () => { /* filled after modal opens */ });
-  const choice = await modal({ title: "Family group", body, actions: [{ label: "Close", value: null }] , onBody: (bodyEl, done) => {
+  await modal({ title: "Family group", body, actions: [{ label: "Close", value: null }] , onBody: (bodyEl, done) => {
     bodyEl.querySelectorAll(".rn[data-id]").forEach(n => n.onclick = () => { done(null); V.focusOn(n.dataset.id); });
   }});
 }
@@ -3145,7 +3720,7 @@ async function openFamilyGroup(id) {
    ------------------------------------------------------------------------- */
 function ancestorsWithDist(id) {
   const store = S(); const map = new Map([[id, 0]]); const q = [[id, 0]];
-  while (q.length) { const [cur, d] = q.shift(); const p = store.person(cur); if (!p) continue; for (const par of p.parentIds) if (!map.has(par)) { map.set(par, d + 1); q.push([par, d + 1]); } }
+  for (let qi = 0; qi < q.length; qi++) { const [cur, d] = q[qi]; const p = store.person(cur); if (!p) continue; for (const par of p.parentIds) if (!map.has(par)) { map.set(par, d + 1); q.push([par, d + 1]); } }
   return map;
 }
 function ordinal(n) { const s = ["th", "st", "nd", "rd"], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
@@ -3175,6 +3750,7 @@ function kinshipTerm(u, d, sexB, opts = {}) {
   const cousin = Math.min(u, d) - 1, removed = Math.abs(u - d);
   return ordinal(cousin) + " cousin" + (removed ? " " + removedWord(removed) + " removed" : "");
 }
+FT.kinshipTerm = kinshipTerm;
 
 /* Closest common ancestor between two people → {u, d, anc} or null. */
 function bloodDist(xId, yId) {
@@ -3277,7 +3853,7 @@ async function openRelationshipFinder(presetA) {
           const p = store.person(step.id);
           const rel = i === 0 ? "" : step.rel === "parent" ? "↑ parent" : step.rel === "child" ? "↓ child" : "⇄ spouse";
           if (i > 0) html += `<div class="conn">${rel}</div>`;
-          html += `<div class="step"><span class="av" data-person="${p.id}">${U.escapeHtml(personInitials(p))}</span> <b>${U.escapeHtml(store.fullName(p))}</b> <small style="color:var(--ink-soft)">${U.escapeHtml(lifespan(p))}</small></div>`;
+          html += `<div class="step"><span class="av" data-person="${U.escapeHtml(p.id)}">${U.escapeHtml(personInitials(p))}</span> <b>${U.escapeHtml(store.fullName(p))}</b> <small style="color:var(--ink-soft)">${U.escapeHtml(lifespan(p))}</small></div>`;
         });
         html += `</div>`;
       }
@@ -3301,26 +3877,33 @@ function nextOccurrence(month, day, from) {
   if (d < from) d = new Date(y + 1, month - 1, day || 1);
   return d;
 }
-/* Upcoming birthdays + anniversaries within N days, soonest first. */
+/* Upcoming birthdays + anniversaries within N days, soonest first. Only dates
+   with a known month AND day count — "some time in March" has no day to
+   celebrate on, and used to be listed as the 1st. Approximate dates
+   (abt/bef/aft…) are skipped for the same reason. A 29 Feb birthday falls on
+   1 Mar in non-leap years (JavaScript Date rollover). */
 function upcomingEvents(withinDays = 60) {
   const store = S(); const today = new Date(); today.setHours(0, 0, 0, 0);
+  const exact = (d) => d && d.month && d.day && !d.approx;
   const items = [];
   for (const p of store.people()) {
     if (p.death) continue;
     const b = p.birth && p.birth.date;
-    if (b && b.month) { const nx = nextOccurrence(b.month, b.day, today); const age = b.year ? nx.getFullYear() - b.year : null;
-      items.push({ when: nx, kind: "birthday", icon: "🎂", who: [p.id], text: `${store.displayName(p)}${age != null ? " turns " + age : "’s birthday"}` }); }
+    if (exact(b)) { const nx = nextOccurrence(b.month, b.day, today); const age = b.year ? nx.getFullYear() - b.year : null;
+      items.push({ when: nx, kind: "birthday", icon: "🎂", label: "Birthday", who: [p.id], text: `${store.displayName(p)}${age != null ? " turns " + age : "’s birthday"}` }); }
   }
   for (const m of store.marriages()) {
-    if (m.divorced || !m.date || !m.date.month) continue;
+    if (m.divorced || !exact(m.date)) continue;
     const sps = m.spouseIds.map(id => store.person(id)).filter(Boolean);
     if (sps.length === 2 && sps.every(s => !s.death)) { const nx = nextOccurrence(m.date.month, m.date.day, today); const yrs = m.date.year ? nx.getFullYear() - m.date.year : null;
-      items.push({ when: nx, kind: "anniversary", icon: "💍", who: m.spouseIds, text: `${store.displayName(sps[0])} & ${store.displayName(sps[1])}${yrs != null ? " — " + yrs + " yrs" : ""}` }); }
+      items.push({ when: nx, kind: "anniversary", icon: "💍", label: "Anniversary", who: m.spouseIds, text: `${store.displayName(sps[0])} & ${store.displayName(sps[1])}${yrs != null ? " — " + yrs + " yrs" : ""}` }); }
   }
   items.sort((a, b) => a.when - b.when);
   return items.filter(i => (i.when - today) / 86400000 <= withinDays);
 }
-/* Compact on-canvas reminder card (bottom-left). Dismissible for the session. */
+FT.upcomingEvents = upcomingEvents;
+/* Compact on-canvas reminder card (bottom-left). Closing it leaves a 🎂 button;
+   the choice is remembered in prefs across sessions. */
 function renderUpcoming(vr) {
   const items = upcomingEvents(45);
   if (!items.length) return;
@@ -3352,25 +3935,13 @@ function renderUpcoming(vr) {
   vr.appendChild(box);
 }
 async function openReminders() {
-  const store = S(); const today = new Date(); today.setHours(0, 0, 0, 0);
-  const items = [];
-  for (const p of store.people()) {
-    if (p.death) continue;
-    const b = p.birth && p.birth.date;
-    if (b && b.month) { const nx = nextOccurrence(b.month, b.day, today); const age = b.year ? nx.getFullYear() - b.year : null; items.push({ when: nx, kind: "🎂 Birthday", who: [p.id], text: `${store.displayName(p)}${age != null ? " turns " + age : "’s birthday"}` }); }
-  }
-  for (const m of store.marriages()) {
-    if (m.divorced || !m.date || !m.date.month) continue;
-    const sps = m.spouseIds.map(id => store.person(id)).filter(Boolean);
-    if (sps.length === 2 && sps.every(s => !s.death)) { const nx = nextOccurrence(m.date.month, m.date.day, today); const yrs = m.date.year ? nx.getFullYear() - m.date.year : null; items.push({ when: nx, kind: "💍 Anniversary", who: m.spouseIds, text: `${store.displayName(sps[0])} & ${store.displayName(sps[1])}${yrs != null ? " — " + yrs + " years" : ""}` }); }
-  }
-  items.sort((a, b) => a.when - b.when);
-  const soon = items.filter(i => (i.when - today) / 86400000 <= 60);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const soon = upcomingEvents(60);
   const body = document.createElement("div");
-  if (!soon.length) body.innerHTML = `<div style="color:var(--ink-soft)">No birthdays or anniversaries with known dates in the next 60 days.</div>`;
+  if (!soon.length) body.innerHTML = `<div style="color:var(--ink-soft)">No birthdays or anniversaries with a known day in the next 60 days.</div>`;
   else body.innerHTML = soon.map(i => {
     const days = Math.round((i.when - today) / 86400000);
-    return `<div class="rel-row"><span class="rn"><b>${i.kind.split(" ")[0]}</b> ${U.escapeHtml(i.text)} <small>· ${i.when.toLocaleDateString(undefined, { month: "short", day: "numeric" })} · ${days === 0 ? "today" : days === 1 ? "tomorrow" : "in " + days + " days"}</small></span></div>`;
+    return `<div class="rel-row"><span class="rn" title="${i.label}"><b>${i.icon}</b> ${U.escapeHtml(i.text)} <small>· ${i.when.toLocaleDateString(undefined, { month: "short", day: "numeric" })} · ${days === 0 ? "today" : days === 1 ? "tomorrow" : "in " + days + " days"}</small></span></div>`;
   }).join("");
   await modal({ title: "Upcoming birthdays & anniversaries", body, actions: [{ label: "Close", value: null }] });
 }
@@ -3390,7 +3961,6 @@ async function openValidation() {
   }
   await modal({ title: "Data check", body, actions: [{ label: "Close", value: null }] });
 }
-function closeAllModals() { document.querySelectorAll(".modal-back").forEach(m => m.remove()); }
 
 function printBranch() {
   const store = S(); const id = V.getFocus(); const p = store.person(id); if (!p) { window.print(); return; }
@@ -3533,6 +4103,7 @@ function openMenu() {
   sep();
   item("🖨️ Print / PDF this person’s sheet", printBranch);
   item("⬇️ Download a copy (JSON)", downloadJSON);
+  item("📤 Export GEDCOM (.ged) for other apps", exportGEDCOMFlow);
   sep();
   item("📂 Open another tree", () => { if (!state.dirty || confirm("Discard unsaved changes and open another tree?")) loadTreeFlow(); });
   item("✳️ New tree", () => { if (!state.dirty || confirm("Discard unsaved changes and start a new tree?")) newTreeFlow(); });
@@ -3565,7 +4136,7 @@ function openAddRelativeMenu(personId, anchorEl) {
 function addMenuOutside(e) { const pop = document.getElementById("addPop"); if (pop && !pop.contains(e.target)) closeAddMenu(); }
 function closeAddMenu() { const pop = document.getElementById("addPop"); if (pop) pop.remove(); document.removeEventListener("pointerdown", addMenuOutside, true); }
 async function openAbout() {
-  await modal({ title: "About Family Tree", body: `<p style="line-height:1.6">A private, offline family tree. Your data lives in <b>tree-data.json</b> and a <b>photos/</b> folder inside the folder you chose — copy that folder anywhere to move or back up your whole tree.</p><p style="line-height:1.6;color:var(--ink-soft)">Single file · no accounts · no internet required. Works best in Chrome or Edge, where Save writes straight back to your folder.</p>`, actions: [{ label: "Close", value: true, kind: "primary" }] });
+  await modal({ title: "About Family Tree", body: `<p style="line-height:1.6"><b>Version ${APP_VERSION}</b> · MIT licence</p><p style="line-height:1.6">A private, offline family tree. Your data lives in <b>tree-data.json</b> and a <b>photos/</b> folder inside the folder you chose — copy that folder anywhere to move or back up your whole tree.</p><p style="line-height:1.6;color:var(--ink-soft)">Single file · no accounts · no internet required. Works best in Chrome or Edge, where Save writes straight back to your folder.</p>`, actions: [{ label: "Close", value: true, kind: "primary" }] });
 }
 
 V.init = function () {
@@ -3577,12 +4148,13 @@ V.init = function () {
   document.getElementById("btnUndo").addEventListener("click", () => History.undo());
   document.getElementById("btnRedo").addEventListener("click", () => History.redo());
   document.getElementById("btnHistory").addEventListener("click", () => toggleHistoryPanel());
-  document.getElementById("saveState").addEventListener("click", () => { if (state.data) saveFlow(); });
+  document.getElementById("saveState").addEventListener("click", () => { if (state.data) saveFlow(false); });
   document.getElementById("btnHistoryClose").addEventListener("click", () => toggleHistoryPanel(false));
   updateHistoryButtons();
   // Undo/redo keyboard shortcuts (but not while typing in a field — let the field handle its own).
   window.addEventListener("keydown", (e) => {
     if (!(e.ctrlKey || e.metaKey) || !state.data) return;
+    if (modalStack.length) return;     // a dialog is editing something — don't change the tree under it
     const t = e.target, editable = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
     const k = e.key.toLowerCase();
     if (k === "z" && !e.shiftKey) { if (editable) return; e.preventDefault(); History.undo(); }

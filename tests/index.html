@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Family Tree — tests</title>
+<style>
+  body{font:14px/1.5 system-ui,sans-serif;margin:20px;color:#222}
+  h1{margin:0 0 4px} h2{font-size:15px;margin:18px 0 4px;color:#555}
+  #summary{font-weight:700;font-size:16px;margin:6px 0 10px}
+  .pass{color:#1d7a3a} .fail{color:#b3261e}
+  .tc{padding:1px 0;font-family:ui-monospace,Consolas,monospace;font-size:13px;white-space:pre-wrap}
+  #frames{position:absolute;left:-5000px;top:0}   /* off-screen but laid out, so layout tests see real sizes */
+</style>
+</head>
+<body>
+<h1>Family Tree — tests</h1>
+<div>Add <code>?suite=Name</code> to run one suite.</div>
+<div id="summary">running…</div>
+<div id="out"></div>
+<div id="frames"></div>
+<script>
+// Load every file with a cache-buster: a stale cached test file would
+// otherwise let an old version of a test "pass" silently.
+const FILES = ["harness.js", "fixtures.js", "dates.test.js", "store.test.js", "kinship.test.js", "gedcom.test.js",
+  "persistence.test.js", "history.test.js", "security.test.js", "ui.test.js"];
+(async () => {
+  const v = Date.now();
+  for (const f of FILES) await new Promise((res, rej) => {
+    const s = document.createElement("script"); s.src = `${f}?v=${v}`;
+    s.onload = res; s.onerror = () => rej(new Error("could not load tests/" + f));
+    document.head.appendChild(s);
+  });
+  runAll();
+})().catch(e => { document.getElementById("summary").textContent = "ERROR: " + e.message; document.title = "FAIL load"; window.__results = { pass: 0, fail: 1, failures: [{ error: e.message }], done: true }; });
+</script>
+</body>
+</html>
